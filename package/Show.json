@@ -1,0 +1,14 @@
+{
+    "name": "MYSHOW",
+    "packages_root": "/studio/packages",
+    "pins": {
+        "nuke": "15.0.1",
+        "mytool": "2.3.0",
+        "pipelinecore": "1.0.4",
+        "colour": "0.4.2"
+    },
+    "with_packages": {
+        "nuke": ["pipelinecore", "colour"],
+        "mytool": ["pipelinecore"]
+    }
+}

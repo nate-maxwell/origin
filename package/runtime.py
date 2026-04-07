@@ -1,0 +1,367 @@
+"""Simplified DD-style runtime: package resolution and environment building."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+
+class PackageNotFoundError(Exception):
+    """Raised when a package directory or config cannot be located on disk."""
+
+
+class VersionNotPinnedError(Exception):
+    """Raised when a required package has no version pin in the show config."""
+
+
+# ---------------------------------------------------------------------------
+# Context
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Context(object):
+    """A resolved package: its identity, disk location, and environment contribution.
+
+    Attributes:
+        name (str): The package name.
+        version (str): The resolved version string.
+        root (Path): Absolute path to the package directory on disk.
+        python_paths (list[str]): Absolute paths contributed to PYTHONPATH.
+        env (dict[str, str]): Environment variables contributed by this package,
+            after all token expansion has been applied.
+    """
+
+    name: str
+    version: str
+    root: Path
+    python_paths: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+
+    def __repr__(self) -> str:
+        return f"Context({self.name!r}, version={self.version!r})"
+
+
+# ---------------------------------------------------------------------------
+# Config dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PackageConfig(object):
+    """Parsed contents of a Package.json file.
+
+    Attributes:
+        name (str): Package name.
+        version (str): Package version.
+        python_paths (list[str]): Paths relative to the package root to add to PYTHONPATH.
+        env (dict[str, str]): Environment variables to contribute. Values may use
+            {root} (expands to the package root) and $VAR / ${VAR} (expands
+            against the environment being built, so earlier packages' vars are
+            available to later ones).
+    """
+
+    name: str
+    version: str
+    python_paths: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def from_file(cls, path: Path) -> "PackageConfig":
+        """Load and parse a Package.json file.
+
+        Args:
+            path (Path): Path to the Package.json file.
+
+        Returns:
+            PackageConfig: The parsed config.
+        """
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return cls(
+            name=data["name"],
+            version=data["version"],
+            python_paths=data.get("python_paths", []),
+            env=data.get("env", {}),
+        )
+
+
+@dataclass
+class ShowConfig(object):
+    """Parsed contents of a Show.json file.
+
+    Attributes:
+        name (str): Show name.
+        packages_root (str): Root directory containing all versioned package folders.
+        pins (dict[str, str]): Maps package name to its pinned version string.
+        with_packages (dict[str, list[str]]): Maps package name to a list of
+            additional package names that are auto-resolved alongside it.
+    """
+
+    name: str
+    packages_root: str
+    pins: dict[str, str] = field(default_factory=dict)
+    with_packages: dict[str, list[str]] = field(default_factory=dict)
+
+    @classmethod
+    def from_file(cls, path: Path) -> "ShowConfig":
+        """Load and parse a Show.json file.
+
+        Args:
+            path (Path): Path to the Show.json file.
+
+        Returns:
+            ShowConfig: The parsed config.
+        """
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return cls(
+            name=data["name"],
+            packages_root=data["packages_root"],
+            pins=data.get("pins", {}),
+            with_packages=data.get("with_packages", {}),
+        )
+
+
+# ---------------------------------------------------------------------------
+# EnvironmentResolver
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ResolvedEnvironment(object):
+    """The result of an EnvironmentResolver.resolve() call.
+
+    Attributes:
+        env (dict[str, str]): The fully built environment, ready to pass to
+            subprocess.Popen(env=...). Keys and values are all strings.
+        contexts (list[Context]): One Context per resolved package, in load order.
+    """
+
+    env: dict[str, str]
+    contexts: list[Context]
+
+
+class EnvironmentResolver(object):
+    """Builds a resolved environment dict from a show config and a list of packages.
+
+    Does not touch os.environ or sys.path. The returned environment dict can be
+    passed directly to subprocess.Popen(env=...).
+
+    Usage:
+        resolver = EnvironmentResolver(show)
+        result = resolver.resolve(["mytool", "nuke"], base_env=os.environ.copy())
+        subprocess.Popen(["nuke", "-t", "script.nk"], env=result.env)
+
+    Args:
+        show (ShowConfig): The show configuration to resolve packages from.
+        extra_search_paths (list[Path]): Additional directories to search for
+            packages alongside show.packages_root.
+    """
+
+    def __init__(
+        self,
+        show: ShowConfig,
+        extra_search_paths: Optional[list[Path]] = None,
+    ) -> None:
+        self._show = show
+        self._extra_search_paths = extra_search_paths or []
+
+    def resolve(
+        self,
+        packages: list[str],
+        base_env: Optional[dict[str, str]] = None,
+    ) -> ResolvedEnvironment:
+        """Resolve a list of packages and return the resulting environment.
+
+        With-packages declared in the show config are automatically included.
+        Duplicate packages (whether requested directly or pulled in as
+        with-packages) are resolved only once, in first-seen order.
+
+        $VAR expansion in package env values resolves against the environment
+        as it accumulates, so a package can reference vars set by an earlier
+        package in the same resolve call.
+
+        Args:
+            packages (list[str]): Package names to resolve.
+            base_env (dict[str, str]): The starting environment to layer package
+                vars on top of. Pass os.environ.copy() to inherit the current
+                process environment, or an empty dict for a fully isolated env.
+                Defaults to os.environ.copy().
+
+        Returns:
+            ResolvedEnvironment: The built env dict and one Context per package.
+
+        Raises:
+            VersionNotPinnedError: If a package or its with-packages has no pin.
+            PackageNotFoundError: If a package directory does not exist on disk.
+        """
+        env: dict[str, str] = (
+            dict(base_env) if base_env is not None else dict(os.environ)
+        )
+        contexts: list[Context] = []
+
+        for name in self._resolve_load_order(packages):
+            ctx = self._resolve_package(name, env)
+            contexts.append(ctx)
+
+            # Merge this package's python_paths into PYTHONPATH in the env dict.
+            if ctx.python_paths:
+                existing = env.get("PYTHONPATH", "")
+                new_paths = os.pathsep.join(ctx.python_paths)
+                env["PYTHONPATH"] = (
+                    os.pathsep.join([new_paths, existing]) if existing else new_paths
+                )
+
+            # Merge env vars into the accumulating env so later packages can
+            # expand $VAR references against them.
+            env.update(ctx.env)
+
+        return ResolvedEnvironment(env=env, contexts=contexts)
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _resolve_load_order(self, packages: list[str]) -> list[str]:
+        """Return a flat, deduplicated load order including all with-packages.
+
+        With-packages are resolved before the package that declares them so
+        that $VAR expansion in a package's env values can reference variables
+        set by its dependencies.
+
+        Args:
+            packages (list[str]): Explicitly requested package names.
+
+        Returns:
+            list[str]: Ordered, deduplicated list of all package names to resolve.
+        """
+        seen: set[str] = set()
+        order: list[str] = []
+
+        def visit(name_: str) -> None:
+            if name_ in seen:
+                return
+            seen.add(name_)
+            for dep in self._show.with_packages.get(name_, []):
+                visit(dep)
+            order.append(name_)
+
+        for name in packages:
+            visit(name)
+
+        return order
+
+    def _resolve_version(self, name: str) -> str:
+        """Look up the pinned version for a package in the show config.
+
+        Args:
+            name (str): Package name.
+
+        Returns:
+            str: Pinned version string.
+
+        Raises:
+            VersionNotPinnedError: If the package has no pin in the show config.
+        """
+        try:
+            return self._show.pins[name]
+        except KeyError:
+            raise VersionNotPinnedError(
+                f"Package '{name}' has no version pin in show '{self._show.name}'."
+            )
+
+    def _find_package_dir(self, name: str, version: str) -> Path:
+        """Locate the versioned package directory on disk.
+
+        Searches show.packages_root first, then any extra_search_paths.
+
+        Args:
+            name (str): Package name.
+            version (str): Version string.
+
+        Returns:
+            Path: Absolute path to the package version directory.
+
+        Raises:
+            PackageNotFoundError: If no matching directory is found.
+        """
+        search_roots = [Path(self._show.packages_root), *self._extra_search_paths]
+        for root in search_roots:
+            candidate = root / name / version
+            if candidate.is_dir():
+                return candidate
+        searched = ", ".join(str(r) for r in search_roots)
+        raise PackageNotFoundError(
+            f"Package '{name}' version '{version}' not found. Searched: {searched}"
+        )
+
+    def _expand_value(self, value: str, root: Path, env: dict[str, str]) -> str:
+        """Expand {root} and $VAR / ${VAR} tokens in an env var value.
+
+        {root} is substituted first, then $VAR / ${VAR} references are expanded
+        against env — the environment as accumulated so far during this resolve
+        call, not os.environ.
+
+        Args:
+            value (str): Raw value string from Package.json.
+            root (Path): Absolute path to the package directory.
+            env (dict[str, str]): The environment accumulated so far.
+
+        Returns:
+            str: Fully expanded value.
+        """
+        value = value.replace("{root}", str(root))
+
+        def replace(match: re.Match) -> str:
+            key = match.group(1) or match.group(2)
+            return env.get(key, match.group(0))
+
+        return re.sub(r"\$\{(\w+)}|\$(\w+)", replace, value)
+
+    def _resolve_package(self, name: str, env: dict[str, str]) -> Context:
+        """Read a package config from disk and build its Context.
+
+        Does not mutate env. The caller is responsible for merging ctx.env
+        back into the accumulating environment after this returns.
+
+        Args:
+            name (str): Package name to resolve.
+            env (dict[str, str]): The environment accumulated so far, used for
+                $VAR expansion in this package's env values.
+
+        Returns:
+            Context: The resolved context.
+
+        Raises:
+            VersionNotPinnedError: If the package is not pinned in the show config.
+            PackageNotFoundError: If the package directory does not exist on disk.
+        """
+        version = self._resolve_version(name)
+        pkg_dir = self._find_package_dir(name, version)
+        config = PackageConfig.from_file(pkg_dir / "Package.json")
+
+        abs_python_paths = [
+            str((pkg_dir / rel).resolve()) for rel in config.python_paths
+        ]
+
+        resolved_env: dict[str, str] = {
+            key: self._expand_value(raw, pkg_dir, env)
+            for key, raw in config.env.items()
+        }
+
+        return Context(
+            name=name,
+            version=version,
+            root=pkg_dir,
+            python_paths=abs_python_paths,
+            env=resolved_env,
+        )
