@@ -1,7 +1,5 @@
 """Simplified DD-style runtime: package resolution and environment building."""
 
-from __future__ import annotations
-
 import json
 import os
 import re
