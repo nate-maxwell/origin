@@ -1,16 +1,18 @@
-"""Simplified DD-style runtime: package resolution and environment building."""
+"""
+# Environment Resolver
+
+Responible for package resolution and environment building.
+"""
 
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 from typing import Optional
 
-# ---------------------------------------------------------------------------
-# Exceptions
-# ---------------------------------------------------------------------------
-
+# -----Exceptions---------------------------------------------------------------
 
 class PackageNotFoundError(Exception):
     """Raised when a package directory or config cannot be located on disk."""
@@ -20,14 +22,13 @@ class VersionNotPinnedError(Exception):
     """Raised when a required package has no version pin in the show config."""
 
 
-# ---------------------------------------------------------------------------
-# Context
-# ---------------------------------------------------------------------------
+# -----Context------------------------------------------------------------------
 
 
 @dataclass
 class Context(object):
-    """A resolved package: its identity, disk location, and environment contribution.
+    """
+    A resolved package: its identity, disk location, and environment contribution.
 
     Attributes:
         name (str): The package name.
@@ -48,14 +49,13 @@ class Context(object):
         return f"Context({self.name!r}, version={self.version!r})"
 
 
-# ---------------------------------------------------------------------------
-# Config dataclasses
-# ---------------------------------------------------------------------------
+# -----Config dataclasses-------------------------------------------------------
 
 
 @dataclass
 class PackageConfig(object):
-    """Parsed contents of a Package.json file.
+    """
+    Parsed contents of a Package.json file.
 
     Attributes:
         name (str): Package name.
@@ -74,11 +74,11 @@ class PackageConfig(object):
 
     @classmethod
     def from_file(cls, path: Path) -> "PackageConfig":
-        """Load and parse a Package.json file.
+        """
+        Load and parse a Package.json file.
 
         Args:
             path (Path): Path to the Package.json file.
-
         Returns:
             PackageConfig: The parsed config.
         """
@@ -94,7 +94,8 @@ class PackageConfig(object):
 
 @dataclass
 class ShowConfig(object):
-    """Parsed contents of a Show.json file.
+    """
+    Parsed contents of a Show.json file.
 
     Attributes:
         name (str): Show name.
@@ -111,11 +112,11 @@ class ShowConfig(object):
 
     @classmethod
     def from_file(cls, path: Path) -> "ShowConfig":
-        """Load and parse a Show.json file.
+        """
+        Load and parse a Show.json file.
 
         Args:
             path (Path): Path to the Show.json file.
-
         Returns:
             ShowConfig: The parsed config.
         """
@@ -129,14 +130,13 @@ class ShowConfig(object):
         )
 
 
-# ---------------------------------------------------------------------------
-# EnvironmentResolver
-# ---------------------------------------------------------------------------
+# -----Environment Resolver-----------------------------------------------------
 
 
 @dataclass
 class ResolvedEnvironment(object):
-    """The result of an EnvironmentResolver.resolve() call.
+    """
+    The result of an EnvironmentResolver.resolve() call.
 
     Attributes:
         env (dict[str, str]): The fully built environment, ready to pass to
@@ -149,7 +149,8 @@ class ResolvedEnvironment(object):
 
 
 class EnvironmentResolver(object):
-    """Builds a resolved environment dict from a show config and a list of packages.
+    """
+    Builds a resolved environment dict from a show config and a list of packages.
 
     Does not touch os.environ or sys.path. The returned environment dict can be
     passed directly to subprocess.Popen(env=...).
@@ -158,7 +159,6 @@ class EnvironmentResolver(object):
         resolver = EnvironmentResolver(show)
         result = resolver.resolve(["mytool", "nuke"], base_env=os.environ.copy())
         subprocess.Popen(["nuke", "-t", "script.nk"], env=result.env)
-
     Args:
         show (ShowConfig): The show configuration to resolve packages from.
         extra_search_paths (list[Path]): Additional directories to search for
@@ -176,9 +176,10 @@ class EnvironmentResolver(object):
     def resolve(
         self,
         packages: list[str],
-        base_env: Optional[dict[str, str]] = None,
+        base_env: dict[str, str],
     ) -> ResolvedEnvironment:
-        """Resolve a list of packages and return the resulting environment.
+        """
+        Resolve a list of packages and return the resulting environment.
 
         With-packages declared in the show config are automatically included.
         Duplicate packages (whether requested directly or pulled in as
@@ -194,17 +195,15 @@ class EnvironmentResolver(object):
                 vars on top of. Pass os.environ.copy() to inherit the current
                 process environment, or an empty dict for a fully isolated env.
                 Defaults to os.environ.copy().
-
         Returns:
             ResolvedEnvironment: The built env dict and one Context per package.
-
         Raises:
             VersionNotPinnedError: If a package or its with-packages has no pin.
             PackageNotFoundError: If a package directory does not exist on disk.
         """
-        env: dict[str, str] = (
-            dict(base_env) if base_env is not None else dict(os.environ)
-        )
+        if base_env is None:
+            raise ValueError
+        env: dict[str, str] = base_env
         contexts: list[Context] = []
 
         for name in self._resolve_load_order(packages):
@@ -225,12 +224,9 @@ class EnvironmentResolver(object):
 
         return ResolvedEnvironment(env=env, contexts=contexts)
 
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
-
     def _resolve_load_order(self, packages: list[str]) -> list[str]:
-        """Return a flat, deduplicated load order including all with-packages.
+        """
+        Return a flat, deduplicated load order including all with-packages.
 
         With-packages are resolved before the package that declares them so
         that $VAR expansion in a package's env values can reference variables
@@ -238,7 +234,6 @@ class EnvironmentResolver(object):
 
         Args:
             packages (list[str]): Explicitly requested package names.
-
         Returns:
             list[str]: Ordered, deduplicated list of all package names to resolve.
         """
@@ -259,14 +254,13 @@ class EnvironmentResolver(object):
         return order
 
     def _resolve_version(self, name: str) -> str:
-        """Look up the pinned version for a package in the show config.
+        """
+        Look up the pinned version for a package in the show config.
 
         Args:
             name (str): Package name.
-
         Returns:
             str: Pinned version string.
-
         Raises:
             VersionNotPinnedError: If the package has no pin in the show config.
         """
@@ -278,17 +272,16 @@ class EnvironmentResolver(object):
             )
 
     def _find_package_dir(self, name: str, version: str) -> Path:
-        """Locate the versioned package directory on disk.
+        """
+        Locate the versioned package directory on disk.
 
         Searches show.packages_root first, then any extra_search_paths.
 
         Args:
             name (str): Package name.
             version (str): Version string.
-
         Returns:
             Path: Absolute path to the package version directory.
-
         Raises:
             PackageNotFoundError: If no matching directory is found.
         """
@@ -297,13 +290,15 @@ class EnvironmentResolver(object):
             candidate = root / name / version
             if candidate.is_dir():
                 return candidate
+
         searched = ", ".join(str(r) for r in search_roots)
         raise PackageNotFoundError(
             f"Package '{name}' version '{version}' not found. Searched: {searched}"
         )
 
     def _expand_value(self, value: str, root: Path, env: dict[str, str]) -> str:
-        """Expand {root} and $VAR / ${VAR} tokens in an env var value.
+        """
+        Expand {root} and $VAR / ${VAR} tokens in an env var value.
 
         {root} is substituted first, then $VAR / ${VAR} references are expanded
         against env — the environment as accumulated so far during this resolve
@@ -313,11 +308,10 @@ class EnvironmentResolver(object):
             value (str): Raw value string from Package.json.
             root (Path): Absolute path to the package directory.
             env (dict[str, str]): The environment accumulated so far.
-
         Returns:
             str: Fully expanded value.
         """
-        value = value.replace("{root}", str(root))
+        value = value.replace("{root}", root.as_posix())
 
         def replace(match: re.Match) -> str:
             key = match.group(1) or match.group(2)
@@ -326,7 +320,8 @@ class EnvironmentResolver(object):
         return re.sub(r"\$\{(\w+)}|\$(\w+)", replace, value)
 
     def _resolve_package(self, name: str, env: dict[str, str]) -> Context:
-        """Read a package config from disk and build its Context.
+        """
+        Read a package config from disk and build its Context.
 
         Does not mutate env. The caller is responsible for merging ctx.env
         back into the accumulating environment after this returns.
@@ -335,10 +330,8 @@ class EnvironmentResolver(object):
             name (str): Package name to resolve.
             env (dict[str, str]): The environment accumulated so far, used for
                 $VAR expansion in this package's env values.
-
         Returns:
             Context: The resolved context.
-
         Raises:
             VersionNotPinnedError: If the package is not pinned in the show config.
             PackageNotFoundError: If the package directory does not exist on disk.
