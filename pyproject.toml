@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 
 [tool.setuptools]
-packages = ["package"]
+packages = ["envereal"]
 
 
 [project]
-name = "Package"
+name = "Envereal"
 authors = [
     {name = "Nathan Maxwell"}
 ]

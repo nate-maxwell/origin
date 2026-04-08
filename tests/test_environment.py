@@ -5,7 +5,7 @@ import os
 import pytest
 from pathlib import Path
 
-from package.environment import (
+from envereal.environment import (
     EnvironmentConfig,
     EnvironmentResolver,
     PackageConfig,
@@ -24,7 +24,7 @@ def make_package(
     python_paths: list[str] | None = None,
     env: dict[str, str] | None = None,
 ) -> Path:
-    """Write a Package.json into root/name/version/ and return the package dir."""
+    """Write a Package.json into root/name/version/ and return the envereal dir."""
     pkg_dir = root / name / version
     pkg_dir.mkdir(parents=True, exist_ok=True)
     for rel in python_paths or []:
