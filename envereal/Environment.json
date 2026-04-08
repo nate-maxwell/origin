@@ -1,13 +1,13 @@
 {
     "name": "MYSHOW",
-    "packages_root": "/studio/packages",
+    "packages_root": "T:/git/envereal/dev",
     "versions": {
-        "nuke": "15.0.1",
-        "mytool": "2.3.0",
-        "pipelinecore": "1.0.4",
-        "colour": "0.4.2"
+        "pipelinecore": "1.2.0",
+        "colour": "0.4.2",
+        "service": "15.0.1",
+        "mytool": "2.3.0"
     },
-    "loadout": {
+    "loadouts": {
         "nuke": ["pipelinecore", "colour"],
         "mytool": ["pipelinecore"]
     }
