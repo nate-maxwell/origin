@@ -1,7 +1,11 @@
 """
 # Environment Resolver
 
-Responible for package resolution and environment building.
+Responsible for package resolution and environment building.
+
+Packages are resolved first as PackageConfig objects that represent the raw
+config data and then are converted to Context objects, a resolved package
+representation including all the paths necessary to run the package.
 """
 
 import json
@@ -12,7 +16,8 @@ from dataclasses import field
 from pathlib import Path
 from typing import Optional
 
-# -----Exceptions---------------------------------------------------------------
+# -----Exceptions--------------------------------------------------------------
+
 
 class PackageNotFoundError(Exception):
     """Raised when a package directory or config cannot be located on disk."""
@@ -22,7 +27,7 @@ class VersionNotPinnedError(Exception):
     """Raised when a required package has no version pin in the show config."""
 
 
-# -----Context------------------------------------------------------------------
+# -----Context-----------------------------------------------------------------
 
 
 @dataclass
@@ -49,7 +54,7 @@ class Context(object):
         return f"Context({self.name!r}, version={self.version!r})"
 
 
-# -----Config dataclasses-------------------------------------------------------
+# -----Config dataclasses------------------------------------------------------
 
 
 @dataclass
@@ -60,7 +65,8 @@ class PackageConfig(object):
     Attributes:
         name (str): Package name.
         version (str): Package version.
-        python_paths (list[str]): Paths relative to the package root to add to PYTHONPATH.
+        python_paths (list[str]): Paths relative to the package root to add to
+            PYTHONPATH.
         env (dict[str, str]): Environment variables to contribute. Values may use
             {root} (expands to the package root) and $VAR / ${VAR} (expands
             against the environment being built, so earlier packages' vars are
@@ -93,9 +99,9 @@ class PackageConfig(object):
 
 
 @dataclass
-class ShowConfig(object):
+class EnvironmentConfig(object):
     """
-    Parsed contents of a Show.json file.
+    Parsed contents of an Environment.json file.
 
     Attributes:
         name (str): Show name.
@@ -111,14 +117,14 @@ class ShowConfig(object):
     with_packages: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
-    def from_file(cls, path: Path) -> "ShowConfig":
+    def from_file(cls, path: Path) -> "EnvironmentConfig":
         """
-        Load and parse a Show.json file.
+        Load and parse an Environment.json file.
 
         Args:
-            path (Path): Path to the Show.json file.
+            path (Path): Path to the Environment.json file.
         Returns:
-            ShowConfig: The parsed config.
+            EnvironmentConfig: The parsed config.
         """
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -130,13 +136,15 @@ class ShowConfig(object):
         )
 
 
-# -----Environment Resolver-----------------------------------------------------
+# -----Environment Resolver----------------------------------------------------
 
 
 @dataclass
 class ResolvedEnvironment(object):
     """
     The result of an EnvironmentResolver.resolve() call.
+    Contains the full environment for all necessary tools related to a program
+    and a list of Context objects that represent each of those packages.
 
     Attributes:
         env (dict[str, str]): The fully built environment, ready to pass to
@@ -160,14 +168,14 @@ class EnvironmentResolver(object):
         result = resolver.resolve(["mytool", "nuke"], base_env=os.environ.copy())
         subprocess.Popen(["nuke", "-t", "script.nk"], env=result.env)
     Args:
-        show (ShowConfig): The show configuration to resolve packages from.
+        show (EnvironmentConfig): The show configuration to resolve packages from.
         extra_search_paths (list[Path]): Additional directories to search for
             packages alongside show.packages_root.
     """
 
     def __init__(
         self,
-        show: ShowConfig,
+        show: EnvironmentConfig,
         extra_search_paths: Optional[list[Path]] = None,
     ) -> None:
         self._show = show
@@ -176,7 +184,7 @@ class EnvironmentResolver(object):
     def resolve(
         self,
         packages: list[str],
-        base_env: dict[str, str],
+        base_env: Optional[dict[str, str]] = None,
     ) -> ResolvedEnvironment:
         """
         Resolve a list of packages and return the resulting environment.
@@ -191,19 +199,15 @@ class EnvironmentResolver(object):
 
         Args:
             packages (list[str]): Package names to resolve.
-            base_env (dict[str, str]): The starting environment to layer package
-                vars on top of. Pass os.environ.copy() to inherit the current
-                process environment, or an empty dict for a fully isolated env.
-                Defaults to os.environ.copy().
+            base_env (Optional[dict[str, str]]): The starting environment to
+                layer package vars on top of. Defaults to None.
         Returns:
             ResolvedEnvironment: The built env dict and one Context per package.
         Raises:
             VersionNotPinnedError: If a package or its with-packages has no pin.
             PackageNotFoundError: If a package directory does not exist on disk.
         """
-        if base_env is None:
-            raise ValueError
-        env: dict[str, str] = base_env
+        env: dict[str, str] = base_env if base_env is not None else {}
         contexts: list[Context] = []
 
         for name in self._resolve_load_order(packages):
@@ -296,7 +300,8 @@ class EnvironmentResolver(object):
             f"Package '{name}' version '{version}' not found. Searched: {searched}"
         )
 
-    def _expand_value(self, value: str, root: Path, env: dict[str, str]) -> str:
+    @staticmethod
+    def _expand_value(value: str, root: Path, env: dict[str, str]) -> str:
         """
         Expand {root} and $VAR / ${VAR} tokens in an env var value.
 

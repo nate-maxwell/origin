@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+
+[tool.setuptools]
+packages = ["package"]
+
+
+[project]
+name = "Package"
+authors = [
+    {name = "Nathan Maxwell"}
+]
+description = "A light-weight abstraction for building environments."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["python", "environment"]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+]
+dependencies = [
+    'importlib-metadata; python_version<"3.10"',
+    "pytest",
+]
+version = "0.1.0"
+
+
+[project.urls]
+Homepage = "https://github.com/nate-maxwell/package-manager"
+Source = "https://github.com/nate-maxwell/package-manager"
+
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
