@@ -1,11 +1,11 @@
 """
 # Environment Resolver
 
-Responsible for envereal resolution and environment building.
+Responsible for package resolution and environment building.
 
 Packages are resolved first as PackageConfig objects that represent the raw
-config data and then are converted to Context objects, a resolved envereal
-representation including all the paths necessary to run the envereal.
+config data and then are converted to Context objects, a resolved package
+representation including all the paths necessary to run the package.
 """
 
 import json
@@ -20,11 +20,14 @@ from typing import Optional
 
 
 class PackageNotFoundError(Exception):
-    """Raised when a envereal directory or config cannot be located on disk."""
+    """Raised when a package directory or config cannot be located on disk."""
 
 
-class VersionNotPinnedError(Exception):
-    """Raised when a required envereal has no version pin in the show config."""
+class VersionNotSpecifiedError(Exception):
+    """
+    Raised when a required package has no specified version in the Environment
+    config.
+    """
 
 
 # -----Context-----------------------------------------------------------------
@@ -33,14 +36,14 @@ class VersionNotPinnedError(Exception):
 @dataclass
 class Context(object):
     """
-    A resolved envereal: its identity, disk location, and environment contribution.
+    A resolved package: its identity, disk location, and environment contribution.
 
     Attributes:
-        name (str): The envereal name.
+        name (str): The package name.
         version (str): The resolved version string.
-        root (Path): Absolute path to the envereal directory on disk.
+        root (Path): Absolute path to the package directory on disk.
         python_paths (list[str]): Absolute paths contributed to PYTHONPATH.
-        env (dict[str, str]): Environment variables contributed by this envereal,
+        env (dict[str, str]): Environment variables contributed by this package,
             after all token expansion has been applied.
     """
 
@@ -65,10 +68,10 @@ class PackageConfig(object):
     Attributes:
         name (str): Package name.
         version (str): Package version.
-        python_paths (list[str]): Paths relative to the envereal root to add to
+        python_paths (list[str]): Paths relative to the package root to add to
             PYTHONPATH.
         env (dict[str, str]): Environment variables to contribute. Values may use
-            {root} (expands to the envereal root) and $VAR / ${VAR} (expands
+            {root} (expands to the package root) and $VAR / ${VAR} (expands
             against the environment being built, so earlier packages' vars are
             available to later ones).
     """
@@ -105,15 +108,15 @@ class EnvironmentConfig(object):
 
     Attributes:
         name (str): Show name.
-        packages_root (str): Root directory containing all versioned envereal folders.
-        pins (dict[str, str]): Maps envereal name to its pinned version string.
-        with_packages (dict[str, list[str]]): Maps envereal name to a list of
-            additional envereal names that are auto-resolved alongside it.
+        packages_root (str): Root directory containing all versioned package folders.
+        versions (dict[str, str]): Maps package name to its version string.
+        with_packages (dict[str, list[str]]): Maps package name to a list of
+            additional package names that are auto-resolved alongside it.
     """
 
     name: str
     packages_root: str
-    pins: dict[str, str] = field(default_factory=dict)
+    versions: dict[str, str] = field(default_factory=dict)
     with_packages: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
@@ -131,7 +134,7 @@ class EnvironmentConfig(object):
         return cls(
             name=data["name"],
             packages_root=data["packages_root"],
-            pins=data.get("pins", {}),
+            versions=data.get("versions", {}),
             with_packages=data.get("with_packages", {}),
         )
 
@@ -149,7 +152,7 @@ class ResolvedEnvironment(object):
     Attributes:
         env (dict[str, str]): The fully built environment, ready to pass to
             subprocess.Popen(env=...). Keys and values are all strings.
-        contexts (list[Context]): One Context per resolved envereal, in load order.
+        contexts (list[Context]): One Context per resolved package, in load order.
     """
 
     env: dict[str, str]
@@ -168,17 +171,18 @@ class EnvironmentResolver(object):
         result = resolver.resolve(["mytool", "nuke"], base_env=os.environ.copy())
         subprocess.Popen(["nuke", "-t", "script.nk"], env=result.env)
     Args:
-        show (EnvironmentConfig): The show configuration to resolve packages from.
+        config (EnvironmentConfig): The environment configuration to resolve
+            packages from.
         extra_search_paths (list[Path]): Additional directories to search for
             packages alongside show.packages_root.
     """
 
     def __init__(
         self,
-        show: EnvironmentConfig,
+        config: EnvironmentConfig,
         extra_search_paths: Optional[list[Path]] = None,
     ) -> None:
-        self._show = show
+        self._config = config
         self._extra_search_paths = extra_search_paths or []
 
     def resolve(
@@ -189,23 +193,22 @@ class EnvironmentResolver(object):
         """
         Resolve a list of packages and return the resulting environment.
 
-        With-packages declared in the show config are automatically included.
-        Duplicate packages (whether requested directly or pulled in as
-        with-packages) are resolved only once, in first-seen order.
+        Loadouts declared in the environment config are automatically included.
+        Duplicate packages are resolved only once, in first-seen order.
 
-        $VAR expansion in envereal env values resolves against the environment
-        as it accumulates, so a envereal can reference vars set by an earlier
-        envereal in the same resolve call.
+        $VAR expansion in package env values resolves against the environment
+        as it accumulates, so a package can reference vars set by an earlier
+        package in the same resolve call.
 
         Args:
             packages (list[str]): Package names to resolve.
             base_env (Optional[dict[str, str]]): The starting environment to
-                layer envereal vars on top of. Defaults to None.
+                layer package vars on top of. Defaults to None.
         Returns:
-            ResolvedEnvironment: The built env dict and one Context per envereal.
+            ResolvedEnvironment: The built env dict and one Context per package.
         Raises:
-            VersionNotPinnedError: If a envereal or its with-packages has no pin.
-            PackageNotFoundError: If a envereal directory does not exist on disk.
+            VersionNotSpecifiedError: If a package has no specified version.
+            PackageNotFoundError: If a package directory does not exist on disk.
         """
         env: dict[str, str] = base_env if base_env is not None else {}
         contexts: list[Context] = []
@@ -214,7 +217,7 @@ class EnvironmentResolver(object):
             ctx = self._resolve_package(name, env)
             contexts.append(ctx)
 
-            # Merge this envereal's python_paths into PYTHONPATH in the env dict.
+            # Merge this package's python_paths into PYTHONPATH in the env dict.
             if ctx.python_paths:
                 existing = env.get("PYTHONPATH", "")
                 new_paths = os.pathsep.join(ctx.python_paths)
@@ -230,16 +233,16 @@ class EnvironmentResolver(object):
 
     def _resolve_load_order(self, packages: list[str]) -> list[str]:
         """
-        Return a flat, deduplicated load order including all with-packages.
+        Return a flat, deduplicated load order including all packages.
 
-        With-packages are resolved before the envereal that declares them so
-        that $VAR expansion in a envereal's env values can reference variables
+        With-packages are resolved before the package that declares them so
+        that $VAR expansion in a package's env values can reference variables
         set by its dependencies.
 
         Args:
-            packages (list[str]): Explicitly requested envereal names.
+            packages (list[str]): Explicitly requested package names.
         Returns:
-            list[str]: Ordered, deduplicated list of all envereal names to resolve.
+            list[str]: Ordered, deduplicated list of all package names to resolve.
         """
         seen: set[str] = set()
         order: list[str] = []
@@ -248,7 +251,7 @@ class EnvironmentResolver(object):
             if name_ in seen:
                 return
             seen.add(name_)
-            for dep in self._show.with_packages.get(name_, []):
+            for dep in self._config.with_packages.get(name_, []):
                 visit(dep)
             order.append(name_)
 
@@ -259,25 +262,25 @@ class EnvironmentResolver(object):
 
     def _resolve_version(self, name: str) -> str:
         """
-        Look up the pinned version for a envereal in the show config.
+        Look up the version for a package in the environment config.
 
         Args:
             name (str): Package name.
         Returns:
-            str: Pinned version string.
+            str: Package version string.
         Raises:
-            VersionNotPinnedError: If the envereal has no pin in the show config.
+            VersionNotSpecifiedError: If the package has no version in the environment config.
         """
         try:
-            return self._show.pins[name]
+            return self._config.versions[name]
         except KeyError:
-            raise VersionNotPinnedError(
-                f"Package '{name}' has no version pin in show '{self._show.name}'."
+            raise VersionNotSpecifiedError(
+                f"Package '{name}' has no version in environment config '{self._config.name}'."
             )
 
     def _find_package_dir(self, name: str, version: str) -> Path:
         """
-        Locate the versioned envereal directory on disk.
+        Locate the versioned package directory on disk.
 
         Searches show.packages_root first, then any extra_search_paths.
 
@@ -285,11 +288,11 @@ class EnvironmentResolver(object):
             name (str): Package name.
             version (str): Version string.
         Returns:
-            Path: Absolute path to the envereal version directory.
+            Path: Absolute path to the package version directory.
         Raises:
             PackageNotFoundError: If no matching directory is found.
         """
-        search_roots = [Path(self._show.packages_root), *self._extra_search_paths]
+        search_roots = [Path(self._config.packages_root), *self._extra_search_paths]
         for root in search_roots:
             candidate = root / name / version
             if candidate.is_dir():
@@ -311,7 +314,7 @@ class EnvironmentResolver(object):
 
         Args:
             value (str): Raw value string from Package.json.
-            root (Path): Absolute path to the envereal directory.
+            root (Path): Absolute path to the package directory.
             env (dict[str, str]): The environment accumulated so far.
         Returns:
             str: Fully expanded value.
@@ -326,7 +329,7 @@ class EnvironmentResolver(object):
 
     def _resolve_package(self, name: str, env: dict[str, str]) -> Context:
         """
-        Read a envereal config from disk and build its Context.
+        Read a package config from disk and build its Context.
 
         Does not mutate env. The caller is responsible for merging ctx.env
         back into the accumulating environment after this returns.
@@ -334,12 +337,12 @@ class EnvironmentResolver(object):
         Args:
             name (str): Package name to resolve.
             env (dict[str, str]): The environment accumulated so far, used for
-                $VAR expansion in this envereal's env values.
+                $VAR expansion in this package's env values.
         Returns:
             Context: The resolved context.
         Raises:
-            VersionNotPinnedError: If the envereal is not pinned in the show config.
-            PackageNotFoundError: If the envereal directory does not exist on disk.
+            VersionNotSpecifiedError: If the package version is not in the show config.
+            PackageNotFoundError: If the package directory does not exist on disk.
         """
         version = self._resolve_version(name)
         pkg_dir = self._find_package_dir(name, version)
