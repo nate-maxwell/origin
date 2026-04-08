@@ -110,14 +110,14 @@ class EnvironmentConfig(object):
         name (str): Show name.
         packages_root (str): Root directory containing all versioned package folders.
         versions (dict[str, str]): Maps package name to its version string.
-        with_packages (dict[str, list[str]]): Maps package name to a list of
+        loadout (dict[str, list[str]]): Maps package name to a list of
             additional package names that are auto-resolved alongside it.
     """
 
     name: str
     packages_root: str
     versions: dict[str, str] = field(default_factory=dict)
-    with_packages: dict[str, list[str]] = field(default_factory=dict)
+    loadout: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
     def from_file(cls, path: Path) -> "EnvironmentConfig":
@@ -135,7 +135,7 @@ class EnvironmentConfig(object):
             name=data["name"],
             packages_root=data["packages_root"],
             versions=data.get("versions", {}),
-            with_packages=data.get("with_packages", {}),
+            loadout=data.get("loadout", {}),
         )
 
 
@@ -251,7 +251,7 @@ class EnvironmentResolver(object):
             if name_ in seen:
                 return
             seen.add(name_)
-            for dep in self._config.with_packages.get(name_, []):
+            for dep in self._config.loadout.get(name_, []):
                 visit(dep)
             order.append(name_)
 

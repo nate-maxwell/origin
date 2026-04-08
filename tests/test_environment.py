@@ -11,7 +11,7 @@ from envereal.environment import (
     PackageConfig,
     PackageNotFoundError,
     ResolvedEnvironment,
-    VersionNotPinnedError,
+    VersionNotSpecifiedError,
 )
 
 # -----Helpers-----------------------------------------------------------------
@@ -52,7 +52,7 @@ def make_show(
     return EnvironmentConfig(
         name=name,
         packages_root=packages_root,
-        pins=pins,
+        versions=pins,
         with_packages=with_packages or {},
     )
 
@@ -117,7 +117,7 @@ class TestEnvironmentConfig:
 
         assert cfg.name == "MYSHOW"
         assert cfg.packages_root == "/studio/packages"
-        assert cfg.pins == {"mytool": "2.0.0"}
+        assert cfg.versions == {"mytool": "2.0.0"}
         assert cfg.with_packages == {"mytool": ["pipelinecore"]}
 
     def test_from_file_optional_fields_default_to_empty(self, tmp_path: Path) -> None:
@@ -134,7 +134,7 @@ class TestEnvironmentConfig:
 
         cfg = EnvironmentConfig.from_file(cfg_path)
 
-        assert cfg.pins == {}
+        assert cfg.versions == {}
         assert cfg.with_packages == {}
 
     def test_from_file_missing_file_raises(self, tmp_path: Path) -> None:
@@ -359,7 +359,7 @@ class TestResolve:
         show = make_show(pins={}, packages_root=str(tmp_path))
         resolver = EnvironmentResolver(show)
 
-        with pytest.raises(VersionNotPinnedError):
+        with pytest.raises(VersionNotSpecifiedError):
             resolver.resolve(["unpinned"], base_env={})
 
     def test_package_not_found_raises(self, tmp_path: Path) -> None:
