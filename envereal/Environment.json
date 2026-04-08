@@ -8,7 +8,7 @@
         "mytool": "2.3.0"
     },
     "loadouts": {
-        "nuke": ["pipelinecore", "colour"],
-        "mytool": ["pipelinecore"]
+        "nuke": ["pipelinecore", "colour", "mytool"],
+        "myapp": ["pipelinecore"]
     }
 }
