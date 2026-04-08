@@ -1,0 +1,13 @@
+{
+    "name": "mytool",
+    "version": "2.3.0",
+    "python_paths": [
+        "python"
+    ],
+    "env": {
+        "MYTOOL_ROOT": "{root}",
+        "MYTOOL_PLUGINS": "{root}/plugins",
+        "MYTOOL_VERSION": "2.3.0",
+        "PATH": "{root}/bin:$PATH"
+    }
+}
