@@ -5,7 +5,7 @@ import os
 import pytest
 from pathlib import Path
 
-from envereal.environment import (
+from origin.environment import (
     EnvironmentConfig,
     EnvironmentResolver,
     Package,
