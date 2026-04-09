@@ -16,15 +16,15 @@ class Application(object):
     submitter could be launched if the application did not gracefully exit like
     so:
 
-    >>> app = launch(Path(
-    >>>     "C:/path/to/Nuke.exe"),
-    >>>     Path("T:/shows/MYSHOW/Environment.json"),
-    >>>     "nuke"
-    >>> )
+    app = launch(Path(
+        "C:/path/to/Nuke.exe"),
+        Path("T:/shows/MYSHOW/Environment.json"),
+        "nuke"
+    )
 
-    >>> app.wait()
-    >>> if app.has_crashed:
-    >>>     submit_crash_ticket(app)
+    app.wait()
+    if app.has_crashed:
+        submit_crash_ticket(app)
 
     Attributes:
         executable (Path): Path to the application executable.
