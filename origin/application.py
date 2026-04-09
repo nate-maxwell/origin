@@ -10,6 +10,7 @@ from origin.environment import ResolvedEnvironment
 class Application(object):
     """
     Represents a launched application process.
+    Thin wrapper for subprocess.Popen()
 
     This is helpful for evaluating and reacting to the state of an application.
     For example a support ticket could be automatically submitted, or a ticket
