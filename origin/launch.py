@@ -3,8 +3,9 @@
 import subprocess
 from pathlib import Path
 
-from environment import EnvironmentConfig
-from environment import EnvironmentResolver
+from origin.environment import EnvironmentConfig
+from origin.environment import EnvironmentResolver
+from origin.application import Application
 
 
 def launch(
@@ -12,7 +13,7 @@ def launch(
     environment_config: Path,
     loadout: str,
     args: list[str] | None = None,
-) -> subprocess.Popen:
+) -> Application:
     """
     Resolve an environment and launch an application.
 
@@ -29,6 +30,12 @@ def launch(
     resolved = resolver.resolve([loadout])
 
     cmd = [executable.as_posix()] + (args or [])
-    return subprocess.Popen(
+    proc = subprocess.Popen(
         cmd, env=resolved.env, creationflags=subprocess.CREATE_NEW_CONSOLE
+    )
+    return Application(
+        executable=executable,
+        loadout=loadout,
+        process=proc,
+        resolved=resolved,
     )
