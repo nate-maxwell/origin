@@ -16,6 +16,7 @@ def launch(
 ) -> Application:
     """
     Resolve an environment and launch an application.
+    Custom environment variables are read from packages.
 
     Args:
         executable (Path): The application executable to launch.
