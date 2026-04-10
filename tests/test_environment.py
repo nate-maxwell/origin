@@ -23,7 +23,7 @@ from origin.environment import (
 ENVIRONMENT_JSON = {
     "name": "MYSHOW",
     "packages_root": "T:/packages",
-    "versions": {
+    "packages": {
         "pipelinecore": "1.2.0",
         "mytool": "2.3.0",
     },
@@ -137,8 +137,8 @@ def test_environment_config_parses_versions(
 ) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
         cfg = EnvironmentConfig.from_file(env_config_path)
-    assert cfg.versions["mytool"] == "2.3.0"
-    assert cfg.versions["pipelinecore"] == "1.2.0"
+    assert cfg.packages["mytool"] == "2.3.0"
+    assert cfg.packages["pipelinecore"] == "1.2.0"
 
 
 def test_environment_config_parses_loadouts(
@@ -210,7 +210,7 @@ def test_resolve_raises_on_unknown_loadout(resolver: EnvironmentResolver) -> Non
 def test_resolve_raises_version_not_specified(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
-    data = {**ENVIRONMENT_JSON, "versions": {}}
+    data = {**ENVIRONMENT_JSON, "packages": {}}
     files = {**all_files, str(env_config_path): data}
     with patch("builtins.open", make_mock_open(files)):
         with patch("pathlib.Path.is_dir", return_value=True):

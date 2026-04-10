@@ -120,7 +120,7 @@ class EnvironmentConfig(object):
         name (str): The name of the show or environment this config represents.
         packages_root (str): Root directory containing all versioned package
             folders, structured as packages_root/name/version/.
-        versions (dict[str, str]): Maps each package name to its version string.
+        packages (dict[str, str]): Maps each package name to its version string.
         loadouts (dict[str, list[str]]): Maps a package name to a list of
             additional package names the resolver should include when that
             package is requested.
@@ -128,7 +128,7 @@ class EnvironmentConfig(object):
 
     name: str
     packages_root: str
-    versions: dict[str, str] = field(default_factory=dict)
+    packages: dict[str, str] = field(default_factory=dict)
     loadouts: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
@@ -146,7 +146,7 @@ class EnvironmentConfig(object):
         return cls(
             name=data["name"],
             packages_root=data["packages_root"],
-            versions=data.get("versions", {}),
+            packages=data.get("packages", {}),
             loadouts=data.get("loadouts", {}),
         )
 
@@ -219,7 +219,7 @@ class EnvironmentResolver(object):
             VersionNotSpecifiedError: If the package has no version in the environment config.
         """
         try:
-            return self._cfg.versions[name]
+            return self._cfg.packages[name]
         except KeyError:
             raise VersionNotSpecifiedError(
                 f"Package '{name}' has no version in environment config '{self._cfg.name}'."

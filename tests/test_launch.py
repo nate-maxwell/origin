@@ -17,7 +17,7 @@ from origin.launch import launch
 ENVIRONMENT_JSON = {
     "name": "MYSHOW",
     "packages_root": "T:/packages",
-    "versions": {
+    "packages": {
         "pipelinecore": "1.2.0",
         "mytool": "2.3.0",
     },

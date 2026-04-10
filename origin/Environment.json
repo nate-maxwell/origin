@@ -1,7 +1,7 @@
 {
     "name": "MYSHOW",
     "packages_root": "T:/git/envereal/dev",
-    "versions": {
+    "packages": {
         "pipelinecore": "1.2.0",
         "colour": "0.4.2",
         "service": "15.0.1",
