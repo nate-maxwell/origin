@@ -18,10 +18,10 @@ class Application(object):
     be automatically submitted, or a ticket submitter could be launched if the
     application did not gracefully exit. The exit status can be watched like so:
 
-    app = launch(Path(
-        "C:/path/to/Nuke.exe"),
-        Path("T:/shows/MYSHOW/Environment.json"),
-        "nuke"
+    app = launch(
+        executable=Path("C:/path/to/Nuke.exe"),
+        environment_config=Path("V:/shows/MYSHOW/config/Environment.json"),
+        loadout="Nuke"
     )
 
     app.wait()

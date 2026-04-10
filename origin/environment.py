@@ -7,7 +7,6 @@ is meant for use by very small teams.
 """
 
 import os
-import re
 import json
 from dataclasses import dataclass
 from dataclasses import field
@@ -45,8 +44,6 @@ class Package(object):
         name (str): The package name.
         version (str): The version string, as specified in the EnvironmentConfig.
         root (Path): Absolute path to the versioned package directory on disk.
-        python_paths (list[str]): Absolute paths that were added to PYTHONPATH,
-            derived from the python_paths list in Package.json.
         env (dict[str, str]): Environment variables this package contributes,
             with all {root} and $VAR tokens fully expanded.
     """
@@ -54,7 +51,6 @@ class Package(object):
     name: str
     version: str
     root: Path
-    python_paths: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
 
     def __repr__(self) -> str:
@@ -77,8 +73,6 @@ class PackageConfig(object):
     Attributes:
         name (str): Package name.
         version (str): Package version.
-        python_paths (list[str]): Subdirectory paths relative to the package
-            root to add to PYTHONPATH.
         env (dict[str, str]): Raw environment variable declarations. Values
             may use {root} to reference the package root directory, and
             $VAR or ${VAR} to reference variables set by previously resolved
@@ -87,7 +81,6 @@ class PackageConfig(object):
 
     name: str
     version: str
-    python_paths: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
 
     @classmethod
@@ -102,11 +95,16 @@ class PackageConfig(object):
         """
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+
+        _name = str(data["name"])
+        _version = data["version"]
+        _env = data.get("env", {})
+        _env[f"{_name.upper()}_VERSION"] = _version
+
         return cls(
-            name=data["name"],
-            version=data["version"],
-            python_paths=data.get("python_paths", []),
-            env=data.get("env", {}),
+            name=_name,
+            version=_version,
+            env=_env,
         )
 
 
@@ -181,7 +179,7 @@ class EnvironmentResolver(object):
     def resolve(
         self, loadouts: list[str], base_env: Optional[dict[str, str]] = None
     ) -> ResolvedEnvironment:
-        env: dict[str, str] = base_env if base_env is not None else {}
+        env: dict[str, str] = base_env if base_env is not None else dict(os.environ)
         packages: list[Package] = []
         seen: set[str] = set()
 
@@ -195,16 +193,13 @@ class EnvironmentResolver(object):
                 pkg = self._resolve_package(name, env)
                 packages.append(pkg)
 
-                # Merge this package's python_paths into PYTHONPATH in the current
+                # Merge this package's root into PYTHONPATH in the current
                 # env dict.
-                if pkg.python_paths:
-                    existing = env.get("PYTHONPATH", "")
-                    new_paths = os.pathsep.join(pkg.python_paths)
-                    env["PYTHONPATH"] = (
-                        os.pathsep.join([new_paths, existing])
-                        if existing
-                        else new_paths
-                    )
+                existing = env.get("PYTHONPATH", "")
+                new_paths = os.pathsep.join([pkg.root.as_posix()])
+                env["PYTHONPATH"] = (
+                    os.pathsep.join([new_paths, existing]) if existing else new_paths
+                )
 
                 # Merge env vars into the accumulating env so later packages can
                 # expand $VAR references against them.
@@ -229,30 +224,6 @@ class EnvironmentResolver(object):
             raise VersionNotSpecifiedError(
                 f"Package '{name}' has no version in environment config '{self._cfg.name}'."
             )
-
-    @staticmethod
-    def _expand_value(value: str, root: Path, env: dict[str, str]) -> str:
-        """
-        Expand {root} and $VAR / ${VAR} tokens in an env var value.
-
-        {root} is substituted first, then $VAR / ${VAR} references are expanded
-        against env — the environment as accumulated so far during this resolve
-        call, not os.environ.
-
-        Args:
-            value (str): Raw value string from Package.json.
-            root (Path): Absolute path to the package directory.
-            env (dict[str, str]): The environment accumulated so far.
-        Returns:
-            str: Fully expanded value.
-        """
-        value = value.replace("{root}", root.as_posix())
-
-        def replace(match: re.Match) -> str:
-            key = match.group(1) or match.group(2)
-            return env.get(key, match.group(0))
-
-        return re.sub(r"\$\{(\w+)}|\$(\w+)", replace, value)
 
     def _find_package_dir(self, name: str, version: str) -> Path:
         """
@@ -282,19 +253,9 @@ class EnvironmentResolver(object):
         pkg_dir = self._find_package_dir(name, version)
         pkg_config = PackageConfig.from_file(pkg_dir / "Package.json")
 
-        abs_python_paths = [
-            str((pkg_dir / rel).resolve()) for rel in pkg_config.python_paths
-        ]
-
-        resolved_env: dict[str, str] = {
-            key: self._expand_value(raw, pkg_dir, env)
-            for key, raw in pkg_config.env.items()
-        }
-
         return Package(
             name=name,
             version=version,
             root=pkg_dir,
-            python_paths=abs_python_paths,
-            env=resolved_env,
+            env=pkg_config.env,
         )
