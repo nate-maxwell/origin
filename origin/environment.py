@@ -2,6 +2,8 @@
 # Environment Resolver
 
 Responsible for resolving packages and building environments.
+Unlike other environment abstraction frameworks, Origin is very simplistic and
+is meant for use by very small teams.
 """
 
 import os

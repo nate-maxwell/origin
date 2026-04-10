@@ -10,12 +10,13 @@ from origin.environment import ResolvedEnvironment
 class Application(object):
     """
     Represents a launched application process.
-    Thin wrapper for subprocess.Popen()
+    Thin wrapper for subprocess.Popen() containing the selected environment
+    loadout and the fully resolved environment.
 
-    This is helpful for evaluating and reacting to the state of an application.
-    For example a support ticket could be automatically submitted, or a ticket
-    submitter could be launched if the application did not gracefully exit like
-    so:
+    In addition to launching an application this is helpful for evaluating and
+    reacting to the state of an application. For example a support ticket could
+    be automatically submitted, or a ticket submitter could be launched if the
+    application did not gracefully exit. The exit status can be watched like so:
 
     app = launch(Path(
         "C:/path/to/Nuke.exe"),
@@ -25,7 +26,7 @@ class Application(object):
 
     app.wait()
     if app.has_crashed:
-        submit_crash_ticket(app)
+        submit_crash_ticket(app)  # or other follow-up
 
     Attributes:
         executable (Path): Path to the application executable.
