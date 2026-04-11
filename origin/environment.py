@@ -97,9 +97,18 @@ class PackageConfig(object):
             data = json.load(f)
 
         _name = str(data["name"])
+
         _version = data["version"]
+        _version_parts = _version.split(".")
+        _major = _version_parts[0] if len(_version_parts) > 0 else "x"
+        _minor = _version_parts[1] if len(_version_parts) > 1 else "x"
+        _patch = _version_parts[2] if len(_version_parts) > 2 else "x"
+
         _env = data.get("env", {})
         _env[f"{_name.upper()}_VERSION"] = _version
+        _env[f"{_name.upper()}_MAJOR"] = _major
+        _env[f"{_name.upper()}_MINOR"] = _minor
+        _env[f"{_name.upper()}_PATCH"] = _patch
 
         return cls(
             name=_name,
