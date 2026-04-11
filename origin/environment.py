@@ -93,8 +93,7 @@ class PackageConfig(object):
         Returns:
             PackageConfig: The parsed config with raw, unexpanded values.
         """
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = json.loads(path.read_text(encoding="utf-8"))
 
         _name = str(data["name"])
 
@@ -150,8 +149,8 @@ class EnvironmentConfig(object):
         Returns:
             EnvironmentConfig: The parsed config.
         """
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = json.loads(path.read_text(encoding="utf-8"))
+
         return cls(
             name=data["name"],
             packages_root=data["packages_root"],
