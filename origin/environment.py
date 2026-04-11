@@ -179,6 +179,30 @@ class EnvironmentResolver(object):
     def resolve(
         self, loadouts: list[str], base_env: Optional[dict[str, str]] = None
     ) -> ResolvedEnvironment:
+        """
+        Resolve one or more loadouts into a fully built environment.
+
+        Iterates over each loadout in order, resolving its packages and
+        accumulating their environment contributions. Each package's root
+        directory is prepended to PYTHONPATH, and its env vars are merged
+        into the environment. Packages that appear in multiple loadouts are
+        resolved only once.
+
+        Args:
+            loadouts (list[str]): One or more loadout keys defined in the
+                EnvironmentConfig. Packages are resolved in the order they
+                appear in each loadout.
+            base_env (Optional[dict[str, str]]): Environment to build on top of.
+                When omitted, the current process environment is used as the base.
+        Returns:
+            ResolvedEnvironment: The fully built environment and the list of
+                resolved packages in resolution order.
+        Raises:
+            KeyError: If a loadout key is not defined in the EnvironmentConfig.
+            VersionNotSpecifiedError: If a package in the loadout has no version
+                declared in the EnvironmentConfig.
+            PackageNotFoundError: If a package directory cannot be found on disk.
+        """
         env: dict[str, str] = base_env if base_env is not None else dict(os.environ)
         packages: list[Package] = []
         seen: set[str] = set()
@@ -201,8 +225,7 @@ class EnvironmentResolver(object):
                     os.pathsep.join([new_paths, existing]) if existing else new_paths
                 )
 
-                # Merge env vars into the accumulating env so later packages can
-                # expand $VAR references against them.
+                # Merge env vars into the accumulating env.
                 env.update(pkg.env)
 
         return ResolvedEnvironment(env=env, packages=packages)
