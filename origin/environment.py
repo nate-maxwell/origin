@@ -104,10 +104,10 @@ class PackageConfig(object):
         _patch = _version_parts[2] if len(_version_parts) > 2 else "x"
 
         _env = data.get("env", {})
-        _env[f"{_name.upper()}_VERSION"] = _version
-        _env[f"{_name.upper()}_MAJOR"] = _major
-        _env[f"{_name.upper()}_MINOR"] = _minor
-        _env[f"{_name.upper()}_PATCH"] = _patch
+        _env[f"ORIGIN_{_name.upper()}_VERSION"] = _version
+        _env[f"ORIGIN_{_name.upper()}_MAJOR_VERSION"] = _major
+        _env[f"ORIGIN_{_name.upper()}_MINOR_VERSION"] = _minor
+        _env[f"ORIGIN_{_name.upper()}_PATCH_VERSION"] = _patch
 
         return cls(
             name=_name,
