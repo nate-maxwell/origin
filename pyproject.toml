@@ -36,4 +36,4 @@ Source = "https://github.com/nate-maxwell/origin"
 test = ["pytest>=7.0"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["tests"]
