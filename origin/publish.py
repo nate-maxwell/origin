@@ -85,17 +85,13 @@ def _publish_package(environment_config: Path, source_dir: Path) -> PackageConfi
 def _update_environment_config(
     environment_config: Path,
     distributions: list,
-    loadout_name: str,
 ) -> None:
     """
-    Add published pip distributions to the Environment.json packages section
-    and create a loadout entry for the top-level package.
+    Add the published pip package to the Environment.json packages section.
 
     Args:
         environment_config (Path): Path to the Environment.json file to update.
         distributions (list): Distlib Distribution objects that were published.
-        loadout_name (str): Name of the loadout to create, typically the
-            top-level pip package name.
     Returns:
         None
     """
@@ -103,8 +99,6 @@ def _update_environment_config(
 
     for distribution in distributions:
         data["packages"][distribution.name] = distribution.version
-
-    data["loadouts"][loadout_name] = [d.name for d in distributions]
 
     environment_config.write_text(
         json.dumps(data, indent=4),
@@ -151,9 +145,14 @@ def publish_package(environment_config: Path, source_dir: Path) -> None:
 
 def pip_publish(environment_config: Path, package_name: str) -> None:
     """
-    Download a package from PyPI using pip, generate a Package.json for each
-    installed package and its dependencies, and publish them all to the
-    packages root.
+    Download a package from PyPI using pip, merge all installed distributions
+    into a single Origin package, and publish it to the packages root.
+
+    All distributions installed as dependencies (e.g. PySide6_Essentials,
+    PySide6_Addons, shiboken6) are merged into a single package directory
+    alongside the top-level package, mirroring how pip installs them into
+    a flat site-packages directory. This avoids path resolution issues that
+    arise when distributions expect their dependencies to be co-located.
 
     Args:
         environment_config (Path): Path to the Environment.json file that
@@ -161,11 +160,14 @@ def pip_publish(environment_config: Path, package_name: str) -> None:
         package_name (str): The PyPI package name to install, e.g. "requests"
             or "numpy==1.26.0".
     Raises:
-        PackageVersionExistsError: If any package version has already been
+        PackageVersionExistsError: If the package version has already been
             published to the packages root.
         subprocess.CalledProcessError: If the pip install fails.
-        RuntimeError: If no distributions are found after installation.
+        RuntimeError: If no distributions are found after installation, or if
+            the top-level package cannot be identified in the installed distributions.
     """
+    loadout_name = re.split(r"[=<>!]", package_name)[0].strip()
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
 
@@ -180,13 +182,22 @@ def pip_publish(environment_config: Path, package_name: str) -> None:
                 f"Could not find any distributions after installing '{package_name}'."
             )
 
+        # Find the top-level distribution to get the canonical version
+        top_dist = next(
+            (d for d in distributions if d.name.lower() == loadout_name.lower()),
+            None,
+        )
+        if top_dist is None:
+            raise RuntimeError(
+                f"Could not identify top-level distribution '{loadout_name}' "
+                f"in installed distributions: {[d.name for d in distributions]}"
+            )
+
+        # Merge all distributions into a single staging directory
+        staging_dir = tmp_path / f"_staging_{loadout_name}"
+        staging_dir.mkdir()
+
         for distribution in distributions:
-            name = distribution.name
-            version = distribution.version
-
-            staging_dir = tmp_path / f"_staging_{name}"
-            staging_dir.mkdir()
-
             for installed_file, _, _ in distribution.list_installed_files():
                 src = tmp_path / installed_file
                 dst = staging_dir / installed_file
@@ -195,14 +206,18 @@ def pip_publish(environment_config: Path, package_name: str) -> None:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
 
-            (staging_dir / "Package.json").write_text(
-                json.dumps({"name": name, "version": version, "env": {}}, indent=4),
-                encoding="utf-8",
-            )
+        # Generate a single Package.json for the merged package
+        (staging_dir / "Package.json").write_text(
+            json.dumps(
+                {
+                    "name": loadout_name,
+                    "version": top_dist.version,
+                    "env": {},
+                },
+                indent=4,
+            ),
+            encoding="utf-8",
+        )
 
-            _publish_package(environment_config, staging_dir)
-
-        # Strip version specifier from package_name to get the loadout name
-        # e.g. "numpy==1.26.0" -> "numpy"
-        loadout_name = re.split(r"[=<>!]", package_name)[0].strip()
-        _update_environment_config(environment_config, distributions, loadout_name)
+        _publish_package(environment_config, staging_dir)
+        _update_environment_config(environment_config, [top_dist], loadout_name)
