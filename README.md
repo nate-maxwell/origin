@@ -26,7 +26,8 @@ declaring which version of each package the project uses:
         "mytool": "2.3.0"
     },
     "loadouts": {
-        "nuke": ["pipelinecore", "mytool"]
+        "base": ["pipelinecore"],
+        "nuke": ["base", "mytool"]
     }
 }
 ```
@@ -39,9 +40,10 @@ Each package lives at `packages_root/name/version/` and contains a `Package.json
 {
     "name": "mytool",
     "version": "2.3.0",
+    "description": "This is a cool tool I wrote...",
+    "authors": ["Marty McFly"],
     "env": {
-        "MYTOOL_ROOT": "{root}",
-        "MYTOOL_PLUGINS": "{root}/plugins"
+        "MYTOOL_PLUGINS": "T:/plugins/mytool"
     }
 }
 ```
@@ -80,6 +82,22 @@ publish_package(
 This copies the package to the packages root and creates a version branch in
 the source repository.
 
+**5. Publish a PyPI package.**
+
+```python
+from pathlib import Path
+from origin.publish import pip_publish
+
+pip_publish(
+    environment_config=Path("V:/projects/MYPROJECT/Environment.json"),
+    package_name="requests",
+)
+```
+
+This installs the package and all of its dependencies from PyPI, merges them
+into a single Origin package directory, and adds an entry to the `packages`
+section of `Environment.json`.
+
 ---
 
 ## Concepts
@@ -98,31 +116,58 @@ The package's own declaration of what it contributes to the environment. Each
 versioned package directory on disk contains a `Package.json` that declares
 environment variables to set. Values are taken as literal strings with no token
 expansion. If a package needs to reference a path, the full path should be written
-explicitly in the Package.json.
+explicitly in the `Package.json`.
+
+Origin automatically injects version environment variables for every package.
+For a package named `mytool` at version `2.3.0`, the following variables are
+set automatically:
+
+```
+ORIGIN_MYTOOL_VERSION=2.3.0
+ORIGIN_MYTOOL_MAJOR_VERSION=2
+ORIGIN_MYTOOL_MINOR_VERSION=3
+ORIGIN_MYTOOL_PATCH_VERSION=0
+```
 
 ### Loadout
 
-A named list of packages defined in `Environment.json` that should be resolved
-together for a specific application. For example, a `nuke` loadout might include
-`pipelinecore`, `colour`, and `mytool`. When `launch()` is called with a loadout,
-the resolver walks the list in order, building up the environment as it goes.
-A package that appears in multiple loadouts is only resolved once.
+A named list of packages or other loadouts defined in `Environment.json` that
+should be resolved together for a specific application. Loadouts can reference
+other loadouts by name, allowing shared base configurations to be declared once
+and reused:
+
+```json
+"loadouts": {
+    "base": ["pipelinecore"],
+    "nuke": ["base", "colour", "mytool"],
+    "houdini": ["base", "mytool"]
+}
+```
+
+When `launch()` is called with a loadout, the resolver walks the list in order,
+recursively expanding any nested loadouts and building up the environment as it
+goes. A package that appears in multiple loadouts is only resolved once. Circular
+loadout references are detected and raise an error.
+
+Each entry in a loadout list is first checked against the defined loadouts. If
+found, it is recursed into as a nested loadout. If not found in loadouts, it is
+treated as a package name. Loadout names and package names must therefore be
+unique across both — an entry cannot be both a loadout and a package name.
 
 ### Package
 
 A fully resolved package, produced by the `EnvironmentResolver` after reading a
 `Package.json` from disk. Holds the package name, version, root path on disk,
-and its fully expanded environment variable contributions. The package root is
-automatically prepended to `PYTHONPATH`, making the package importable in the
-launched application without any additional configuration.
+and its environment variable contributions. The package root is automatically
+prepended to `PYTHONPATH`, making the package importable in the launched
+application without any additional configuration.
 
 ### EnvironmentResolver
 
 Takes an `EnvironmentConfig` and resolves one or more loadouts into a
 `ResolvedEnvironment`. Handles version lookup, locating the package directory
-on disk, reading and parsing `Package.json`, expanding `{root}` and `$VAR`
-tokens in env values, and accumulating `PYTHONPATH`. Later packages in a loadout
-can reference environment variables set by earlier ones.
+on disk, reading and parsing `Package.json`, and accumulating `PYTHONPATH`.
+Packages that appear across multiple loadouts are deduplicated.
 
 ### ResolvedEnvironment
 
@@ -155,17 +200,27 @@ accept ad-hoc environment overrides.
 
 Publishes a package from a source directory to the packages root. Reads the
 `packages_root` from an `Environment.json`, reads the package name and version
-from the source directory's `Package.json`, copies the source to `packages_root/name/version/`
-(excluding development artifacts like virtual environments, caches, and editor
-configs), and creates a version branch in the source git repository and pushes
-it to the remote. The git step ensures every deployed artifact is traceable to
-an exact point in source history. The publish will refuse to proceed if the
-repository has uncommitted changes or unpushed commits.
+from the source directory's `Package.json`, copies the source to
+`packages_root/name/version/` (excluding development artifacts like virtual
+environments, caches, and editor configs), and creates a version branch in the
+source git repository and pushes it to the remote. The git step ensures every
+deployed artifact is traceable to an exact point in source history. The publish
+will refuse to proceed if the repository has uncommitted changes or unpushed
+commits.
+
+### pip_publish()
+
+Downloads a package from PyPI and publishes it to the packages root as a single
+Origin package. All distributions installed as dependencies are merged into one
+directory, mirroring the flat layout of a `site-packages` folder. This is
+necessary for packages like PySide6 whose components use relative paths to locate
+each other on disk. Once published, the package is added to the `packages` section
+of `Environment.json` and can be referenced in loadouts like any other package.
 
 ### git_utils
 
 Internal utilities for git operations used by the publish workflow. Provides
 `check_git_available()` to verify git is on the system PATH, `check_repo_is_clean()`
-to assert no uncommitted changes or unpushed commits exist, and `create_and_push_branch()`
-to create a version branch and push it to the remote before returning to the
-original branch.
+to assert no uncommitted changes or unpushed commits exist, and
+`create_and_push_branch()` to create a version branch and push it to the remote
+before returning to the original branch.
