@@ -215,26 +215,23 @@ class EnvironmentResolver(object):
         packages: list[Package] = []
         seen: set[str] = set()
 
-        for loadout in loadouts:
-            packages_to_resolve = self._cfg.loadouts[loadout]
-            for name in packages_to_resolve:
-                if name in seen:
-                    continue
-                seen.add(name)
+        package_names = self._expand_loadouts(loadouts)
 
-                pkg = self._resolve_package(name, env)
-                packages.append(pkg)
+        for name in package_names:
+            if name in seen:
+                continue
+            seen.add(name)
 
-                # Merge this package's root into PYTHONPATH in the current
-                # env dict.
-                existing = env.get("PYTHONPATH", "")
-                new_paths = os.pathsep.join([pkg.root.as_posix()])
-                env["PYTHONPATH"] = (
-                    os.pathsep.join([new_paths, existing]) if existing else new_paths
-                )
+            pkg = self._resolve_package(name, env)
+            packages.append(pkg)
 
-                # Merge env vars into the accumulating env.
-                env.update(pkg.env)
+            existing = env.get("PYTHONPATH", "")
+            new_paths = os.pathsep.join([pkg.root.as_posix()])
+            env["PYTHONPATH"] = (
+                os.pathsep.join([new_paths, existing]) if existing else new_paths
+            )
+
+            env.update(pkg.env)
 
         return ResolvedEnvironment(env=env, packages=packages)
 
@@ -278,6 +275,54 @@ class EnvironmentResolver(object):
         raise PackageNotFoundError(
             f"Package '{name}' version '{version}' not found. Searched: {root.as_posix()}"
         )
+
+    def _expand_loadouts(
+        self, loadouts: list[str], seen_loadouts: Optional[set[str]] = None
+    ) -> list[str]:
+        """
+        Expand a list of loadout names into an ordered, deduplicated list of
+        package names, recursively resolving any loadouts that reference other
+        loadouts.
+
+        Args:
+            loadouts (list[str]): Loadout keys to expand.
+            seen_loadouts (Optional[set[str]]): Tracks visited loadouts to
+                detect circular references.
+        Returns:
+            list[str]: Ordered, deduplicated list of package names.
+        Raises:
+            KeyError: If a loadout key is not defined in the EnvironmentConfig.
+            RecursionError: If a circular loadout reference is detected.
+        """
+        if seen_loadouts is None:
+            seen_loadouts = set()
+
+        package_names: list[str] = []
+        seen_packages: set[str] = set()
+
+        for loadout in loadouts:
+            if loadout in seen_loadouts:
+                raise RecursionError(
+                    f"Circular loadout reference detected: '{loadout}'"
+                )
+            seen_loadouts.add(loadout)
+
+            for entry in self._cfg.loadouts[loadout]:
+                if entry in self._cfg.loadouts:  # Entry is another loadout — recurse
+                    nested = self._expand_loadouts([entry], seen_loadouts.copy())
+                    for name in nested:
+                        if name in seen_packages:
+                            continue
+                        seen_packages.add(name)
+                        package_names.append(name)
+
+                else:  # Entry is a package name
+                    if entry in seen_packages:
+                        continue
+                    seen_packages.add(entry)
+                    package_names.append(entry)
+
+        return package_names
 
     def _resolve_package(self, name: str, env: dict[str, str]) -> Package:
         version = self._resolve_version(name)

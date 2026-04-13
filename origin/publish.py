@@ -3,22 +3,16 @@
 
 Provides tooling for publishing a package from a source directory to the
 packages root defined in an Environment.json file.
-
-A publish operation does the following:
-    1. Reads the Environment.json to determine the packages root.
-    2. Reads the Package.json in the source directory to determine the
-       package name and version.
-    3. Copies the source directory to the packages root, excluding
-       development artifacts such as virtual environments, caches, and
-       editor configs.
-    4. Creates a version branch in the source repository and pushes it
-       to the remote, ensuring the deployed artifact is traceable to an
-       exact point in source history.
 """
 
 import json
+import re
 import shutil
+import subprocess
+import tempfile
 from pathlib import Path
+
+from distlib.database import DistributionPath
 
 import origin.git_utils
 from origin.environment import PackageConfig
@@ -58,29 +52,7 @@ _ignore_list = [
 ]
 
 
-def publish_package(environment_config: Path, source_dir: Path) -> None:
-    """
-    Publish a package from a source directory to the packages root.
-
-    Copies the source directory to packages_root/name/version/ as defined
-    by the Package.json found in source_dir, then creates and pushes a
-    version branch in the source repository.
-
-    Args:
-        environment_config (Path): Path to the Environment.json file that
-            defines the packages root to publish into.
-        source_dir (Path): Path to the root of the package source directory.
-            Must contain a Package.json file.
-    Raises:
-        PackageVersionNotExistsError: If no Package.json is found in source_dir.
-        PackageVersionExistsError: If the package version has already been
-            published to the packages root.
-        git.GitCommandError: If the version branch push fails.
-        ValueError: If the version branch already exists locally.
-        UncommittedChangesError: If the source repository has uncommitted changes.
-        UnpushedCommitsError: If the source repository has unpushed commits.
-    """
-
+def _publish_package(environment_config: Path, source_dir: Path) -> PackageConfig:
     # Environment json
     env_str = environment_config.read_text()
     env_data = json.loads(env_str)
@@ -107,7 +79,130 @@ def publish_package(environment_config: Path, source_dir: Path) -> None:
         dirs_exist_ok=True,
     )
 
+    return pkg_cfg
+
+
+def _update_environment_config(
+    environment_config: Path,
+    distributions: list,
+    loadout_name: str,
+) -> None:
+    """
+    Add published pip distributions to the Environment.json packages section
+    and create a loadout entry for the top-level package.
+
+    Args:
+        environment_config (Path): Path to the Environment.json file to update.
+        distributions (list): Distlib Distribution objects that were published.
+        loadout_name (str): Name of the loadout to create, typically the
+            top-level pip package name.
+    Returns:
+        None
+    """
+    data = json.loads(environment_config.read_text(encoding="utf-8"))
+
+    for distribution in distributions:
+        data["packages"][distribution.name] = distribution.version
+
+    data["loadouts"][loadout_name] = [d.name for d in distributions]
+
+    environment_config.write_text(
+        json.dumps(data, indent=4),
+        encoding="utf-8",
+    )
+
+
+def publish_package(environment_config: Path, source_dir: Path) -> None:
+    """
+    Publish a package from a source directory to the packages root.
+
+    A publish operation does the following:
+    1. Reads the Environment.json to determine the packages root.
+    2. Reads the Package.json in the source directory to determine the
+       package name and version.
+    3. Copies the source directory to the packages root, excluding
+       development artifacts such as virtual environments, caches, and
+       editor configs.
+    4. Creates a version branch in the source repository and pushes it
+       to the remote, ensuring the deployed artifact is traceable to an
+       exact point in source history.
+
+    Args:
+        environment_config (Path): Path to the Environment.json file that
+            defines the packages root to publish into.
+        source_dir (Path): Path to the root of the package source directory.
+            Must contain a Package.json file.
+    Raises:
+        PackageVersionNotExistsError: If no Package.json is found in source_dir.
+        PackageVersionExistsError: If the package version has already been
+            published to the packages root.
+        git.GitCommandError: If the version branch push fails.
+        ValueError: If the version branch already exists locally.
+        UncommittedChangesError: If the source repository has uncommitted changes.
+        UnpushedCommitsError: If the source repository has unpushed commits.
+    """
+    pkg_cfg = _publish_package(environment_config, source_dir)
+
     # Make git branch for package version
     origin.git_utils.check_git_available()
     origin.git_utils.check_repo_is_clean(source_dir)
     origin.git_utils.create_and_push_branch(source_dir, pkg_cfg.version)
+
+
+def pip_publish(environment_config: Path, package_name: str) -> None:
+    """
+    Download a package from PyPI using pip, generate a Package.json for each
+    installed package and its dependencies, and publish them all to the
+    packages root.
+
+    Args:
+        environment_config (Path): Path to the Environment.json file that
+            defines the packages root to publish into.
+        package_name (str): The PyPI package name to install, e.g. "requests"
+            or "numpy==1.26.0".
+    Raises:
+        PackageVersionExistsError: If any package version has already been
+            published to the packages root.
+        subprocess.CalledProcessError: If the pip install fails.
+        RuntimeError: If no distributions are found after installation.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+
+        subprocess.run(
+            ["pip", "install", package_name, "--target", str(tmp_path)],
+            check=True,
+        )
+
+        distributions = list(DistributionPath([str(tmp_path)]).get_distributions())
+        if not distributions:
+            raise RuntimeError(
+                f"Could not find any distributions after installing '{package_name}'."
+            )
+
+        for distribution in distributions:
+            name = distribution.name
+            version = distribution.version
+
+            staging_dir = tmp_path / f"_staging_{name}"
+            staging_dir.mkdir()
+
+            for installed_file, _, _ in distribution.list_installed_files():
+                src = tmp_path / installed_file
+                dst = staging_dir / installed_file
+                if not src.exists():
+                    continue
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+
+            (staging_dir / "Package.json").write_text(
+                json.dumps({"name": name, "version": version, "env": {}}, indent=4),
+                encoding="utf-8",
+            )
+
+            _publish_package(environment_config, staging_dir)
+
+        # Strip version specifier from package_name to get the loadout name
+        # e.g. "numpy==1.26.0" -> "numpy"
+        loadout_name = re.split(r"[=<>!]", package_name)[0].strip()
+        _update_environment_config(environment_config, distributions, loadout_name)

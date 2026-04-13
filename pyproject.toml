@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 
 [tool.setuptools]
-packages = ["envereal"]
+packages = ["origin"]
 
 
 [project]
-name = "Envereal"
+name = "Origin"
 authors = [
     {name = "Nathan Maxwell"}
 ]
@@ -22,13 +22,14 @@ classifiers = [
 dependencies = [
     'importlib-metadata; python_version<"3.10"',
     "pytest",
+    "distlib",
 ]
 version = "0.1.0"
 
 
 [project.urls]
-Homepage = "https://github.com/nate-maxwell/package-manager"
-Source = "https://github.com/nate-maxwell/package-manager"
+Homepage = "https://github.com/nate-maxwell/origin"
+Source = "https://github.com/nate-maxwell/origin"
 
 
 [project.optional-dependencies]
