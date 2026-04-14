@@ -95,8 +95,7 @@ pip_publish(
 ```
 
 This installs the package and all of its dependencies from PyPI, merges them
-into a single Origin package directory, and adds an entry to the `packages`
-section of `Environment.json`.
+into a single Origin package directory.
 
 ---
 
@@ -199,23 +198,19 @@ accept ad-hoc environment overrides.
 ### publish_package()
 
 Publishes a package from a source directory to the packages root. Reads the
-`packages_root` from an `Environment.json`, reads the package name and version
-from the source directory's `Package.json`, copies the source to
-`packages_root/name/version/` (excluding development artifacts like virtual
-environments, caches, and editor configs), and creates a version branch in the
-source git repository and pushes it to the remote. The git step ensures every
-deployed artifact is traceable to an exact point in source history. The publish
-will refuse to proceed if the repository has uncommitted changes or unpushed
-commits.
+package name and version from the source directory's `Package.json`, copies the
+source to `packages_root/name/version/` (excluding development artifacts like
+virtual environments, caches, and editor configs), and creates a version branch
+in the source git repository and pushes it to the remote. The git step ensures
+every deployed artifact is traceable to an exact point in source history. The
+publish will refuse to proceed if the repository has uncommitted changes or
+unpushed commits.
 
 ### pip_publish()
 
 Downloads a package from PyPI and publishes it to the packages root as a single
 Origin package. All distributions installed as dependencies are merged into one
-directory, mirroring the flat layout of a `site-packages` folder. This is
-necessary for packages like PySide6 whose components use relative paths to locate
-each other on disk. Once published, the package is added to the `packages` section
-of `Environment.json` and can be referenced in loadouts like any other package.
+directory, mirroring the flat layout of a `site-packages` folder.
 
 ### git_utils
 

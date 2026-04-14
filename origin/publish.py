@@ -52,12 +52,16 @@ _ignore_list = [
 ]
 
 
-def _publish_package(environment_config: Path, source_dir: Path) -> PackageConfig:
-    # Environment json
-    env_str = environment_config.read_text()
-    env_data = json.loads(env_str)
-    packages_root = Path(env_data["packages_root"])
+def _publish_package(packages_root: Path, source_dir: Path) -> PackageConfig:
+    """
+    Copies the source dir as a package to the correct package path in the
+    packages_root, based on config file for the package.
 
+    Args:
+        packages_root (Path): The path to where packages are getting stored.
+        source_dir (Path): Path to the root of the package source directory.
+            Must contain a Package.json file.
+    """
     # Package json
     package_json = Path(source_dir, "Package.json")
     if not package_json.exists():
@@ -82,48 +86,22 @@ def _publish_package(environment_config: Path, source_dir: Path) -> PackageConfi
     return pkg_cfg
 
 
-def _update_environment_config(
-    environment_config: Path,
-    distributions: list,
-) -> None:
-    """
-    Add the published pip package to the Environment.json packages section.
-
-    Args:
-        environment_config (Path): Path to the Environment.json file to update.
-        distributions (list): Distlib Distribution objects that were published.
-    Returns:
-        None
-    """
-    data = json.loads(environment_config.read_text(encoding="utf-8"))
-
-    for distribution in distributions:
-        data["packages"][distribution.name] = distribution.version
-
-    environment_config.write_text(
-        json.dumps(data, indent=4),
-        encoding="utf-8",
-    )
-
-
-def publish_package(environment_config: Path, source_dir: Path) -> None:
+def publish_package(packages_root: Path, source_dir: Path) -> None:
     """
     Publish a package from a source directory to the packages root.
 
     A publish operation does the following:
-    1. Reads the Environment.json to determine the packages root.
-    2. Reads the Package.json in the source directory to determine the
+    1. Reads the Package.json in the source directory to determine the
        package name and version.
-    3. Copies the source directory to the packages root, excluding
+    2. Copies the source directory to the packages root, excluding
        development artifacts such as virtual environments, caches, and
        editor configs.
-    4. Creates a version branch in the source repository and pushes it
+    3. Creates a version branch in the source repository and pushes it
        to the remote, ensuring the deployed artifact is traceable to an
        exact point in source history.
 
     Args:
-        environment_config (Path): Path to the Environment.json file that
-            defines the packages root to publish into.
+        packages_root (Path): The path to where packages are getting stored.
         source_dir (Path): Path to the root of the package source directory.
             Must contain a Package.json file.
     Raises:
@@ -135,15 +113,13 @@ def publish_package(environment_config: Path, source_dir: Path) -> None:
         UncommittedChangesError: If the source repository has uncommitted changes.
         UnpushedCommitsError: If the source repository has unpushed commits.
     """
-    pkg_cfg = _publish_package(environment_config, source_dir)
-
-    # Make git branch for package version
+    pkg_cfg = _publish_package(packages_root, source_dir)
     origin.git_utils.check_git_available()
     origin.git_utils.check_repo_is_clean(source_dir)
     origin.git_utils.create_and_push_branch(source_dir, pkg_cfg.version)
 
 
-def pip_publish(environment_config: Path, package_name: str) -> None:
+def pip_publish(packages_root: Path, package_name: str) -> None:
     """
     Download a package from PyPI using pip, merge all installed distributions
     into a single Origin package, and publish it to the packages root.
@@ -155,8 +131,7 @@ def pip_publish(environment_config: Path, package_name: str) -> None:
     arise when distributions expect their dependencies to be co-located.
 
     Args:
-        environment_config (Path): Path to the Environment.json file that
-            defines the packages root to publish into.
+        packages_root (Path): The path to where packages are getting stored.
         package_name (str): The PyPI package name to install, e.g. "requests"
             or "numpy==1.26.0".
     Raises:
@@ -178,9 +153,10 @@ def pip_publish(environment_config: Path, package_name: str) -> None:
 
         distributions = list(DistributionPath([str(tmp_path)]).get_distributions())
         if not distributions:
-            raise RuntimeError(
+            err_msg = (
                 f"Could not find any distributions after installing '{package_name}'."
             )
+            raise RuntimeError(err_msg)
 
         # Find the top-level distribution to get the canonical version
         top_dist = next(
@@ -188,10 +164,9 @@ def pip_publish(environment_config: Path, package_name: str) -> None:
             None,
         )
         if top_dist is None:
-            raise RuntimeError(
-                f"Could not identify top-level distribution '{loadout_name}' "
-                f"in installed distributions: {[d.name for d in distributions]}"
-            )
+            err_msg = f"Could not identify top-level distribution '{loadout_name}' "
+            err_msg += f"in installed distributions: {[d.name for d in distributions]}"
+            raise RuntimeError(err_msg)
 
         # Merge all distributions into a single staging directory
         staging_dir = tmp_path / f"_staging_{loadout_name}"
@@ -219,5 +194,4 @@ def pip_publish(environment_config: Path, package_name: str) -> None:
             encoding="utf-8",
         )
 
-        _publish_package(environment_config, staging_dir)
-        _update_environment_config(environment_config, [top_dist], loadout_name)
+        _publish_package(packages_root, staging_dir)
