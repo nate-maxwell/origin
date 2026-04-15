@@ -212,10 +212,18 @@ Downloads a package from PyPI and publishes it to the packages root as a single
 Origin package. All distributions installed as dependencies are merged into one
 directory, mirroring the flat layout of a `site-packages` folder.
 
-### git_utils
+### Caching
 
-Internal utilities for git operations used by the publish workflow. Provides
-`check_git_available()` to verify git is on the system PATH, `check_repo_is_clean()`
-to assert no uncommitted changes or unpushed commits exist, and
-`create_and_push_branch()` to create a version branch and push it to the remote
-before returning to the original branch.
+By default, Origin resolves packages directly from the `packages_root` defined
+in `Environment.json`. When caching is enabled, packages are copied to a local
+cache directory on the host machine before being used. Subsequent launches read
+from the cache rather than the network share, which can improve startup times
+when the packages root is on a remote file server.
+
+The cache directory is platform-dependent:
+
+- **Windows:** `C:/origin/cache`
+- **Mac/Linux:** `~/.origin/cache`
+
+Caching is disabled by default and must be opted into by setting the
+`ORIGIN_CACHING_ENABLED` environment variable to `ENABLED`.

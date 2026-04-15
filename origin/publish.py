@@ -48,9 +48,11 @@ _ignore_list = [
     ".venv",
     "env",
     ".env",
+    "virtualenv",
+    ".virtualenv",
     "virtualenvironment",
-    "virtual_environment",
     ".virtualenvironment",
+    "virtual_environment",
     ".virtual_environment",
 ]
 

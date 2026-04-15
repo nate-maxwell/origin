@@ -8,11 +8,14 @@ is meant for use by very small teams.
 
 import os
 import json
+import shutil
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 from typing import Optional
 from typing import Union
+
+import origin.caching
 
 # -----Exceptions--------------------------------------------------------------
 
@@ -225,7 +228,7 @@ class EnvironmentResolver(object):
                 continue
             seen.add(name)
 
-            pkg = self._resolve_package(name, env)
+            pkg = self._resolve_package(name)
             packages.append(pkg)
 
             existing = env.get("PYTHONPATH", "")
@@ -237,47 +240,6 @@ class EnvironmentResolver(object):
             env.update(pkg.env)
 
         return ResolvedEnvironment(env=env, packages=packages)
-
-    def _resolve_version(self, name: str) -> str:
-        """
-        Look up the version for a package in the environment config.
-
-        Args:
-            name (str): Package name.
-        Returns:
-            str: Package version string.
-        Raises:
-            VersionNotSpecifiedError: If the package has no version in the environment config.
-        """
-        try:
-            return self._cfg.packages[name]
-        except KeyError:
-            raise VersionNotSpecifiedError(
-                f"Package '{name}' has no version in environment config '{self._cfg.name}'."
-            )
-
-    def _find_package_dir(self, name: str, version: str) -> Path:
-        """
-        Locate the versioned package directory on disk.
-
-        Searches show.packages_root first, then any extra_search_paths.
-
-        Args:
-            name (str): Package name.
-            version (str): Version string.
-        Returns:
-            Path: Absolute path to the package version directory.
-        Raises:
-            PackageNotFoundError: If no matching directory is found.
-        """
-        root = Path(self._cfg.packages_root)
-        candidate = root / name / version
-        if candidate.is_dir():
-            return candidate
-
-        raise PackageNotFoundError(
-            f"Package '{name}' version '{version}' not found. Searched: {root.as_posix()}"
-        )
 
     def _expand_loadouts(
         self, loadouts: list[str], seen_loadouts: Optional[set[str]] = None
@@ -329,9 +291,51 @@ class EnvironmentResolver(object):
 
         return package_names
 
-    def _resolve_package(self, name: str, env: dict[str, str]) -> Package:
-        version = self._resolve_version(name)
-        pkg_dir = self._find_package_dir(name, version)
+    def _find_uncached_package_dir(self, name: str, version: str) -> Path:
+        """
+        Locate the versioned package directory on disk.
+
+        Args:
+            name (str): Package name.
+            version (str): Version string.
+        Returns:
+            Path: Absolute path to the package version directory.
+        Raises:
+            PackageNotFoundError: If no matching directory is found.
+        """
+        root = Path(self._cfg.packages_root)
+        candidate = root / name / version
+        if candidate.exists():
+            return candidate
+
+        raise PackageNotFoundError(
+            f"Package '{name}' version '{version}' not found. Searched: {root.as_posix()}"
+        )
+
+    def _cache_and_find_package_dir(self, name: str, version: str) -> Path:
+        root = origin.caching.get_package_cache_dir()
+        candidate = root / name / version
+        if candidate.exists():
+            return candidate
+
+        candidate.mkdir(parents=True, exist_ok=True)
+        uncached_pkg_dir = self._find_uncached_package_dir(name, version)
+        shutil.copytree(uncached_pkg_dir, candidate, dirs_exist_ok=True)
+
+        return candidate
+
+    def _resolve_package(self, name: str) -> Package:
+        try:
+            version = self._cfg.packages[name]
+        except KeyError:
+            err_msg = f"Package '{name}' has no version in environment config '{self._cfg.name}'."
+            raise VersionNotSpecifiedError(err_msg)
+
+        if origin.caching.get_caching_enabled():
+            pkg_dir = self._cache_and_find_package_dir(name, version)
+        else:
+            pkg_dir = self._find_uncached_package_dir(name, version)
+
         pkg_config = PackageConfig.from_file(pkg_dir / "Package.json")
 
         return Package(

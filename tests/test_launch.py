@@ -1,16 +1,13 @@
 """Tests for launch.py"""
 
-import json
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock
-from unittest.mock import mock_open
 from unittest.mock import patch
 
 import pytest
 
 from origin.application import Application
 from origin.launch import launch
+from tests.helpers import make_mock_open
 
 # -----Test data---------------------------------------------------------------
 
@@ -32,28 +29,6 @@ MYTOOL_PACKAGE_JSON = {
         "MYTOOL_ROOT": "/fake/packages/mytool/2.3.0",
     },
 }
-
-
-# -----Helpers-----------------------------------------------------------------
-
-
-def make_mock_open(files: dict[str, dict]) -> MagicMock:
-    """
-    Return a mock for builtins.open that serves different JSON content per path.
-
-    Args:
-        files (dict[str, dict]): Maps file path strings to the dict that
-            should be returned when that path is opened and JSON-decoded.
-    Returns:
-        MagicMock: A mock suitable for patching builtins.open.
-    """
-    normalized = {str(Path(k)): v for k, v in files.items()}
-
-    def _open(path, *args, **kwargs):
-        content = json.dumps(normalized[str(Path(path))])
-        return mock_open(read_data=content)()
-
-    return MagicMock(side_effect=_open)
 
 
 # -----Fixtures----------------------------------------------------------------
@@ -79,7 +54,7 @@ def test_launch_returns_application(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
-        with patch("pathlib.Path.is_dir", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             with patch("subprocess.Popen"):
                 app = launch(
                     executable=Path("/fake/nuke"),
@@ -92,7 +67,7 @@ def test_launch_returns_application(
 
 def test_launch_calls_popen(env_config_path: Path, all_files: dict[str, dict]) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
-        with patch("pathlib.Path.is_dir", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             with patch("subprocess.Popen") as mock_popen:
                 launch(
                     executable=Path("/fake/nuke"),
@@ -107,7 +82,7 @@ def test_launch_passes_executable_to_popen(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
-        with patch("pathlib.Path.is_dir", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             with patch("subprocess.Popen") as mock_popen:
                 launch(
                     executable=Path("/fake/nuke"),
@@ -123,7 +98,7 @@ def test_launch_passes_args_to_popen(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
-        with patch("pathlib.Path.is_dir", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             with patch("subprocess.Popen") as mock_popen:
                 launch(
                     executable=Path("/fake/nuke"),
@@ -140,7 +115,7 @@ def test_launch_passes_resolved_env_to_popen(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
-        with patch("pathlib.Path.is_dir", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             with patch("subprocess.Popen") as mock_popen:
                 launch(
                     executable=Path("/fake/nuke"),
@@ -156,7 +131,7 @@ def test_launch_stores_loadout_on_application(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
-        with patch("pathlib.Path.is_dir", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             with patch("subprocess.Popen"):
                 app = launch(
                     executable=Path("/fake/nuke"),
@@ -171,7 +146,7 @@ def test_launch_stores_resolved_env_on_application(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
-        with patch("pathlib.Path.is_dir", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             with patch("subprocess.Popen"):
                 app = launch(
                     executable=Path("/fake/nuke"),

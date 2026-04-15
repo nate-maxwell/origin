@@ -1,11 +1,8 @@
 """Tests for environment.py"""
 
-import json
 from pathlib import Path
 from typing import Any
 from typing import Generator
-from unittest.mock import MagicMock
-from unittest.mock import mock_open
 from unittest.mock import patch
 
 import pytest
@@ -17,6 +14,7 @@ from origin.environment import (
     PackageNotFoundError,
     VersionNotSpecifiedError,
 )
+from tests.helpers import make_mock_open
 
 # -----Test data---------------------------------------------------------------
 
@@ -48,28 +46,6 @@ MYTOOL_PACKAGE_JSON = {
 }
 
 
-# -----Helpers-----------------------------------------------------------------
-
-
-def make_mock_open(files: dict[str, dict]) -> MagicMock:
-    """
-    Return a mock for builtins.open that serves different JSON content per path.
-
-    Args:
-        files (dict[str, dict]): Maps file path strings to the dict that
-            should be returned when that path is opened and JSON-decoded.
-    Returns:
-        MagicMock: A mock suitable for patching builtins.open.
-    """
-    normalized = {str(Path(k)): v for k, v in files.items()}
-
-    def _open(path, *args, **kwargs):
-        content = json.dumps(normalized[str(Path(path))])
-        return mock_open(read_data=content)()
-
-    return MagicMock(side_effect=_open)
-
-
 # -----Fixtures----------------------------------------------------------------
 
 
@@ -92,7 +68,7 @@ def resolver(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> Generator[EnvironmentResolver, Any, None]:
     with patch("builtins.open", make_mock_open(all_files)):
-        with patch("pathlib.Path.is_dir", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             cfg = EnvironmentConfig.from_file(env_config_path)
             yield EnvironmentResolver(cfg)
 
@@ -194,7 +170,7 @@ def test_environment_config_parses_loadouts(
 def test_resolve_returns_correct_package_names(
     resolver: EnvironmentResolver,
 ) -> None:
-    with patch("pathlib.Path.is_dir", return_value=True):
+    with patch("pathlib.Path.exists", return_value=True):
         resolved = resolver.resolve(["nuke"], base_env={})
     assert [p.name for p in resolved.packages] == ["pipelinecore", "mytool"]
 
@@ -202,7 +178,7 @@ def test_resolve_returns_correct_package_names(
 def test_resolve_returns_correct_package_versions(
     resolver: EnvironmentResolver,
 ) -> None:
-    with patch("pathlib.Path.is_dir", return_value=True):
+    with patch("pathlib.Path.exists", return_value=True):
         resolved = resolver.resolve(["nuke"], base_env={})
     versions = {p.name: p.version for p in resolved.packages}
     assert versions["pipelinecore"] == "1.2.0"
@@ -210,7 +186,7 @@ def test_resolve_returns_correct_package_versions(
 
 
 def test_resolve_sets_pythonpath(resolver: EnvironmentResolver) -> None:
-    with patch("pathlib.Path.is_dir", return_value=True):
+    with patch("pathlib.Path.exists", return_value=True):
         resolved = resolver.resolve(["nuke"], base_env={})
     assert "PYTHONPATH" in resolved.env
 
@@ -218,14 +194,14 @@ def test_resolve_sets_pythonpath(resolver: EnvironmentResolver) -> None:
 def test_resolve_pythonpath_contains_package_roots(
     resolver: EnvironmentResolver,
 ) -> None:
-    with patch("pathlib.Path.is_dir", return_value=True):
+    with patch("pathlib.Path.exists", return_value=True):
         resolved = resolver.resolve(["nuke"], base_env={})
     assert "/fake/packages/pipelinecore/1.2.0" in resolved.env["PYTHONPATH"]
     assert "/fake/packages/mytool/2.3.0" in resolved.env["PYTHONPATH"]
 
 
 def test_resolve_sets_version_env_var(resolver: EnvironmentResolver) -> None:
-    with patch("pathlib.Path.is_dir", return_value=True):
+    with patch("pathlib.Path.exists", return_value=True):
         resolved = resolver.resolve(["nuke"], base_env={})
     assert resolved.env["ORIGIN_MYTOOL_VERSION"] == "2.3.0"
 
@@ -233,14 +209,14 @@ def test_resolve_sets_version_env_var(resolver: EnvironmentResolver) -> None:
 def test_resolve_deduplicates_packages_across_loadouts(
     resolver: EnvironmentResolver,
 ) -> None:
-    with patch("pathlib.Path.is_dir", return_value=True):
+    with patch("pathlib.Path.exists", return_value=True):
         resolved = resolver.resolve(["base", "nuke"], base_env={})
     names = [p.name for p in resolved.packages]
     assert names.count("pipelinecore") == 1
 
 
 def test_resolve_raises_on_unknown_loadout(resolver: EnvironmentResolver) -> None:
-    with patch("pathlib.Path.is_dir", return_value=True):
+    with patch("pathlib.Path.exists", return_value=True):
         with pytest.raises(KeyError):
             resolver.resolve(["nonexistent"], base_env={})
 
@@ -289,7 +265,7 @@ def test_resolve_raises_version_not_specified(
     data = {**ENVIRONMENT_JSON, "packages": {}}
     files = {**all_files, str(env_config_path): data}
     with patch("builtins.open", make_mock_open(files)):
-        with patch("pathlib.Path.is_dir", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             cfg = EnvironmentConfig.from_file(env_config_path)
             resolver = EnvironmentResolver(cfg)
             with pytest.raises(VersionNotSpecifiedError):
