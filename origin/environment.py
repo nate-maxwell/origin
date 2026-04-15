@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 from typing import Optional
+from typing import Union
 
 # -----Exceptions--------------------------------------------------------------
 
@@ -84,12 +85,12 @@ class PackageConfig(object):
     env: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def from_file(cls, path: Path) -> "PackageConfig":
+    def from_file(cls, path: Union[str, os.PathLike]) -> "PackageConfig":
         """
         Read and parse a Package.json file from disk.
 
         Args:
-            path (Path): Path to the Package.json file.
+            path (Union[str, os.PathLike]): Path to the Package.json file.
         Returns:
             PackageConfig: The parsed config with raw, unexpanded values.
         """
@@ -141,12 +142,12 @@ class EnvironmentConfig(object):
     loadouts: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
-    def from_file(cls, path: Path) -> "EnvironmentConfig":
+    def from_file(cls, path: Union[str, os.PathLike]) -> "EnvironmentConfig":
         """
         Read and parse an Environment.json file from disk.
 
         Args:
-            path (Path): Path to the Environment.json file.
+            path (Union[str, os.PathLike]): Path to the Environment.json file.
         Returns:
             EnvironmentConfig: The parsed config.
         """

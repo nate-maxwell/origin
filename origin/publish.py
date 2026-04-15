@@ -41,6 +41,9 @@ _ignore_list = [
     ".gitignore",
     "*.egg-info",
     ".github",
+    "test",
+    "tests",
+    "unittests",
     "venv",
     ".venv",
     "env",
@@ -115,8 +118,7 @@ def publish_package(packages_root: Path, source_dir: Path) -> None:
     """
     pkg_cfg = _publish_package(packages_root, source_dir)
     origin.git_utils.check_git_available()
-    origin.git_utils.check_repo_is_clean(source_dir)
-    origin.git_utils.create_and_push_branch(source_dir, pkg_cfg.version)
+    origin.git_utils.create_and_push_tag(source_dir, pkg_cfg.version)
 
 
 def pip_publish(packages_root: Path, package_name: str) -> None:
@@ -182,16 +184,15 @@ def pip_publish(packages_root: Path, package_name: str) -> None:
                 shutil.copy2(src, dst)
 
         # Generate a single Package.json for the merged package
-        (staging_dir / "Package.json").write_text(
-            json.dumps(
+        with open(Path(staging_dir, "Package.json"), encoding="utf-8") as f:
+            json_str = json.dumps(
                 {
                     "name": loadout_name,
                     "version": top_dist.version,
                     "env": {},
                 },
                 indent=4,
-            ),
-            encoding="utf-8",
-        )
+            )
+            f.write(json_str)
 
         _publish_package(packages_root, staging_dir)
