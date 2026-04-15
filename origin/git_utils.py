@@ -65,6 +65,33 @@ def check_repo_is_clean(repo_path: path_type) -> None:
         )
 
 
+def create_and_push_tag(repo_path: path_type, tag_name: str) -> None:
+    """
+    Create a tag in a git repository and push it to the remote.
+
+    Args:
+        repo_path (str | PathLike): Path to the root of the git repository.
+        tag_name (str): Name of the tag to create and push.
+    Raises:
+        ValueError: If the tag already exists locally.
+        git.GitCommandError: If the push fails.
+    """
+    repo = git.Repo(repo_path)
+    if repo.is_dirty(untracked_files=True):
+        raise UncommittedChangesError(
+            f"Repository at '{repo_path}' has uncommitted changes."
+        )
+
+    if tag_name in [t.name for t in repo.tags]:
+        raise ValueError(
+            f"Tag '{tag_name}' already exists locally. "
+            f"If a previous publish attempt failed, delete it manually before retrying."
+        )
+
+    repo.create_tag(tag_name)
+    repo.remote("origin").push(refspec=f"refs/tags/{tag_name}:refs/tags/{tag_name}")
+
+
 def create_and_push_branch(repo_path: path_type, branch_name: str) -> None:
     """
     In a git repository, save the current branch, create a new branch and push
