@@ -21,9 +21,7 @@ publish_package(
 ```
 
 The publish will refuse to proceed if the repository has uncommitted changes or
-unpushed commits. If a previous publish attempt failed partway through, you may
-need to manually delete the partially copied directory and the local git tag
-before retrying. Atomic publishing is on the roadmap.
+unpushed commits.
 
 After publishing, add the package to your `Environment.json` manually:
 

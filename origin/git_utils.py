@@ -32,9 +32,14 @@ def check_git_available() -> None:
         raise EnvironmentError("git is not available on the system PATH.")
 
 
-def create_and_push_tag(
-    repo_path: Optional[Union[str, os.PathLike]], tag_name: str
-) -> None:
+def check_repo_is_clean(repo_path: Union[str, os.PathLike]) -> None:
+    repo = git.Repo(repo_path)
+    if repo.is_dirty(untracked_files=True):
+        err_msg = f"Repository at '{repo_path}' has uncommitted changes."
+        raise UncommittedChangesError(err_msg)
+
+
+def create_and_push_tag(repo_path: Union[str, os.PathLike], tag_name: str) -> None:
     """
     Create a tag in a git repository and push it to the remote.
 
@@ -46,10 +51,7 @@ def create_and_push_tag(
         git.GitCommandError: If the push fails.
     """
     repo = git.Repo(repo_path)
-    if repo.is_dirty(untracked_files=True):
-        raise UncommittedChangesError(
-            f"Repository at '{repo_path}' has uncommitted changes."
-        )
+    check_repo_is_clean(repo_path)
 
     if tag_name in [t.name for t in repo.tags]:
         raise ValueError(

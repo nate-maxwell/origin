@@ -59,80 +59,85 @@ _ignore_list = [
 ]
 
 
-def _publish_package(
+def publish_package(
     repository: Union[str, os.PathLike], source_dir: Union[str, os.PathLike]
-) -> PackageConfig:
+) -> None:
     """
-    Copies the source dir as a package to the correct package path in the
-    packages_root, based on config file for the package.
+    Publish a package from a source directory to a repository.
+
+    A publish operation does the following:
+    1. Reads the Package.json in the source directory to determine the
+       package name and version.
+    2. Copies the source directory to a temporary location in the repository,
+       excluding development artifacts such as virtual environments, caches,
+       and editor configs.
+    3. Renames the temporary directory into its final location, minimising
+       the window in which a partial publish could be observed.
+    4. Creates and pushes a version tag in the source git repository,
+       ensuring the deployed artifact is traceable to an exact point in
+       source history.
+
+    If any step fails, the temporary directory is cleaned up automatically
+    and the repository is left in a clean state. The publish can be retried
+    without manual intervention.
 
     Args:
-        repository (str | os.PathLike): The path to where packages are stored.
-        source_dir (str | os.PathLike): Path to the root of the package
-            source directory. Must contain a Package.json file.
+        repository (str | os.PathLike): Path to the repository to publish into.
+        source_dir (str | os.PathLike): Path to the root of the package source
+            directory. Must contain a Package.json file.
+    Raises:
+        PackageVersionNotExistsError: If no Package.json is found in source_dir.
+        PackageVersionExistsError: If the package version has already been
+            published to the repository.
+        git.GitCommandError: If the version tag push fails.
+        ValueError: If the version tag already exists locally.
+        UncommittedChangesError: If the source repository has uncommitted changes.
     """
-    # Package json
+    repo_path = Path(repository)
     package_json = Path(source_dir, "Package.json")
+
     if not package_json.exists():
         err_msg = f"No Package.json file located in {Path(source_dir).as_posix()}"
         raise PackageVersionNotExistsError(err_msg)
 
     pkg_cfg = PackageConfig.from_file(package_json)
-    package_version_path = Path(repository, pkg_cfg.name, pkg_cfg.version)
+    package_version_path = repo_path / pkg_cfg.name / pkg_cfg.version
 
     if Path(package_version_path, "Package.json").exists():
         err_msg = f"Package {pkg_cfg.name} version {pkg_cfg.version} already exists!"
         raise PackageVersionExistsError(err_msg)
 
-    # Publish package to disk
-    shutil.copytree(
-        source_dir,
-        package_version_path,
-        ignore=shutil.ignore_patterns(*_ignore_list),
-        dirs_exist_ok=True,
-    )
+    # Atomically copy - Copy to a temp directory alongside the destination first
+    tmp_path = repo_path / pkg_cfg.name / f"_tmp_{pkg_cfg.version}"
+    try:
+        shutil.copytree(
+            source_dir,
+            tmp_path,
+            ignore=shutil.ignore_patterns(*_ignore_list),
+            dirs_exist_ok=True,
+        )
 
-    return pkg_cfg
+        # Git checks happen after the copy succeeds but before we commit
+        origin.git_utils.check_git_available()
+        origin.git_utils.check_repo_is_clean(source_dir)
 
+        # Rename into place — this is as close to atomic as the filesystem allows
+        tmp_path.rename(package_version_path)
 
-def publish_package(
-    repository: Union[str, os.PathLike], source_dir: Union[str, os.PathLike]
-) -> None:
-    """
-    Publish a package from a source directory to the packages root.
+        # Tag only after the directory is in its final location
+        origin.git_utils.create_and_push_tag(source_dir, pkg_cfg.version)
 
-    A publish operation does the following:
-    1. Reads the Package.json in the source directory to determine the
-       package name and version.
-    2. Copies the source directory to the packages root, excluding
-       development artifacts such as virtual environments, caches, and
-       editor configs.
-    3. Creates a version branch in the source repository and pushes it
-       to the remote, ensuring the deployed artifact is traceable to an
-       exact point in source history.
-
-    Args:
-        repository (str | os.PathLike): The path to where packages are stored.
-        source_dir (str | os.PathLike): Path to the root of the package
-            source directory. Must contain a Package.json file.
-    Raises:
-        PackageVersionNotExistsError: If no Package.json is found in source_dir.
-        PackageVersionExistsError: If the package version has already been
-            published to the packages root.
-        git.GitCommandError: If the version branch push fails.
-        ValueError: If the version branch already exists locally.
-        UncommittedChangesError: If the source repository has uncommitted changes.
-        UnpushedCommitsError: If the source repository has unpushed commits.
-    """
-    pkg_cfg = _publish_package(repository, source_dir)
-    origin.git_utils.check_git_available()
-    origin.git_utils.create_and_push_tag(source_dir, pkg_cfg.version)
+    except Exception:
+        # Clean up the temp directory if anything went wrong
+        if tmp_path.exists():
+            shutil.rmtree(tmp_path)
+        raise
 
 
 def pip_publish(repository: Union[str, os.PathLike], package_name: str) -> None:
     """
     Download a package from PyPI using pip, merge all installed distributions
-    into a single Origin package, and publish it to the packages root.
+    into a single Origin package, and publish it to the repository.
 
     All distributions installed as dependencies (e.g. PySide6_Essentials,
     PySide6_Addons, shiboken6) are merged into a single package directory
@@ -141,16 +146,17 @@ def pip_publish(repository: Union[str, os.PathLike], package_name: str) -> None:
     arise when distributions expect their dependencies to be co-located.
 
     Args:
-        repository (str | os.PathLike): The path to where packages are stored.
+        repository (str | os.PathLike): Path to the repository to publish into.
         package_name (str): The PyPI package name to install, e.g. "requests"
             or "numpy==1.26.0".
     Raises:
         PackageVersionExistsError: If the package version has already been
-            published to the packages root.
+            published to the repository.
         subprocess.CalledProcessError: If the pip install fails.
         RuntimeError: If no distributions are found after installation, or if
             the top-level package cannot be identified in the installed distributions.
     """
+    repo_path = Path(repository)
     loadout_name = re.split(r"[=<>!]", package_name)[0].strip()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -168,7 +174,6 @@ def pip_publish(repository: Union[str, os.PathLike], package_name: str) -> None:
             )
             raise RuntimeError(err_msg)
 
-        # Find the top-level distribution to get the canonical version
         top_dist = next(
             (d for d in distributions if d.name.lower() == loadout_name.lower()),
             None,
@@ -178,29 +183,39 @@ def pip_publish(repository: Union[str, os.PathLike], package_name: str) -> None:
             err_msg += f"in installed distributions: {[d.name for d in distributions]}"
             raise RuntimeError(err_msg)
 
-        # Merge all distributions into a single staging directory
+        package_version_path = repo_path / loadout_name / top_dist.version
+        if Path(package_version_path, "Package.json").exists():
+            err = f"Package {loadout_name} version {top_dist.version} already exists!"
+            raise PackageVersionExistsError(err)
+
+        # Merge all distributions into a staging directory then rename into place
         staging_dir = tmp_path / f"_staging_{loadout_name}"
         staging_dir.mkdir()
 
-        for distribution in distributions:
-            for installed_file, _, _ in distribution.list_installed_files():
-                src = tmp_path / installed_file
-                dst = staging_dir / installed_file
-                if not src.exists():
-                    continue
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
+        try:
+            for distribution in distributions:
+                for installed_file, _, _ in distribution.list_installed_files():
+                    src = tmp_path / installed_file
+                    dst = staging_dir / installed_file
+                    if not src.exists():
+                        continue
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
 
-        # Generate a single Package.json for the merged package
-        with open(Path(staging_dir, "Package.json"), encoding="utf-8") as f:
-            json_str = json.dumps(
-                {
-                    "name": loadout_name,
-                    "version": top_dist.version,
-                    "env": {},
-                },
-                indent=4,
-            )
-            f.write(json_str)
+            with open(staging_dir / "Package.json", "w", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {"name": loadout_name, "version": top_dist.version, "env": {}},
+                        indent=4,
+                    )
+                )
 
-        _publish_package(repository, staging_dir)
+            tmp_dest = repo_path / loadout_name / f"_tmp_{top_dist.version}"
+            tmp_dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(staging_dir, tmp_dest)
+            tmp_dest.rename(package_version_path)
+
+        except Exception:
+            if tmp_dest.exists():
+                shutil.rmtree(tmp_dest)
+            raise
