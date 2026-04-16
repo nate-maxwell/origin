@@ -20,7 +20,10 @@ from tests.helpers import make_mock_open
 
 ENVIRONMENT_JSON = {
     "name": "MYSHOW",
-    "packages_root": "/fake/packages",
+    "repositories": [
+        "/fake/project/packages",
+        "/fake/studio/packages",
+    ],
     "packages": {
         "pipelinecore": "1.2.0",
         "mytool": "2.3.0",
@@ -35,7 +38,7 @@ PIPELINECORE_PACKAGE_JSON = {
     "name": "pipelinecore",
     "version": "1.2.0",
     "env": {
-        "PIPELINECORE_ROOT": "/fake/packages/pipelinecore/1.2.0",
+        "PIPELINECORE_ROOT": "/fake/studio/packages/pipelinecore/1.2.0",
     },
 }
 
@@ -44,6 +47,27 @@ MYTOOL_PACKAGE_JSON = {
     "version": "2.3.0",
     "env": {},
 }
+
+
+# -----Helpers-----------------------------------------------------------------
+
+
+def make_exists_in(*roots: str):
+    """
+    Return a side effect function that returns True only for paths under
+    the given roots.
+
+    Args:
+        roots (str): Root path prefixes to match against.
+    Returns:
+        Callable: A side effect function for patching pathlib.Path.exists.
+    """
+
+    def _exists(self) -> bool:
+        normalized = str(self).replace("\\", "/")
+        return any(root in normalized for root in roots)
+
+    return _exists
 
 
 # -----Fixtures----------------------------------------------------------------
@@ -58,8 +82,10 @@ def env_config_path() -> Path:
 def all_files(env_config_path: Path) -> dict[str, dict]:
     return {
         str(env_config_path): ENVIRONMENT_JSON,
-        "/fake/packages/pipelinecore/1.2.0/Package.json": PIPELINECORE_PACKAGE_JSON,
-        "/fake/packages/mytool/2.3.0/Package.json": MYTOOL_PACKAGE_JSON,
+        "/fake/project/packages/pipelinecore/1.2.0/Package.json": PIPELINECORE_PACKAGE_JSON,
+        "/fake/project/packages/mytool/2.3.0/Package.json": MYTOOL_PACKAGE_JSON,
+        "/fake/studio/packages/pipelinecore/1.2.0/Package.json": PIPELINECORE_PACKAGE_JSON,
+        "/fake/studio/packages/mytool/2.3.0/Package.json": MYTOOL_PACKAGE_JSON,
     }
 
 
@@ -77,42 +103,42 @@ def resolver(
 
 
 def test_package_config_parses_name(all_files: dict[str, dict]) -> None:
-    path = Path("/fake/packages/mytool/2.3.0/Package.json")
+    path = Path("/fake/studio/packages/mytool/2.3.0/Package.json")
     with patch("builtins.open", make_mock_open(all_files)):
         cfg = PackageConfig.from_file(path)
     assert cfg.name == "mytool"
 
 
 def test_package_config_parses_version(all_files: dict[str, dict]) -> None:
-    path = Path("/fake/packages/mytool/2.3.0/Package.json")
+    path = Path("/fake/studio/packages/mytool/2.3.0/Package.json")
     with patch("builtins.open", make_mock_open(all_files)):
         cfg = PackageConfig.from_file(path)
     assert cfg.version == "2.3.0"
 
 
 def test_package_config_injects_version_env_var(all_files: dict[str, dict]) -> None:
-    path = Path("/fake/packages/mytool/2.3.0/Package.json")
+    path = Path("/fake/studio/packages/mytool/2.3.0/Package.json")
     with patch("builtins.open", make_mock_open(all_files)):
         cfg = PackageConfig.from_file(path)
     assert cfg.env["ORIGIN_MYTOOL_VERSION"] == "2.3.0"
 
 
 def test_package_config_injects_major_version(all_files: dict[str, dict]) -> None:
-    path = Path("/fake/packages/mytool/2.3.0/Package.json")
+    path = Path("/fake/studio/packages/mytool/2.3.0/Package.json")
     with patch("builtins.open", make_mock_open(all_files)):
         cfg = PackageConfig.from_file(path)
     assert cfg.env["ORIGIN_MYTOOL_MAJOR_VERSION"] == "2"
 
 
 def test_package_config_injects_minor_version(all_files: dict[str, dict]) -> None:
-    path = Path("/fake/packages/mytool/2.3.0/Package.json")
+    path = Path("/fake/studio/packages/mytool/2.3.0/Package.json")
     with patch("builtins.open", make_mock_open(all_files)):
         cfg = PackageConfig.from_file(path)
     assert cfg.env["ORIGIN_MYTOOL_MINOR_VERSION"] == "3"
 
 
 def test_package_config_injects_patch_version(all_files: dict[str, dict]) -> None:
-    path = Path("/fake/packages/mytool/2.3.0/Package.json")
+    path = Path("/fake/studio/packages/mytool/2.3.0/Package.json")
     with patch("builtins.open", make_mock_open(all_files)):
         cfg = PackageConfig.from_file(path)
     assert cfg.env["ORIGIN_MYTOOL_PATCH_VERSION"] == "0"
@@ -123,13 +149,13 @@ def test_package_config_partial_version_defaults_to_x(
 ) -> None:
     files = {
         **all_files,
-        "/fake/packages/mytool/2.3.0/Package.json": {
+        "/fake/studio/packages/mytool/2.3.0/Package.json": {
             "name": "mytool",
             "version": "2",
             "env": {},
         },
     }
-    path = Path("/fake/packages/mytool/2.3.0/Package.json")
+    path = Path("/fake/studio/packages/mytool/2.3.0/Package.json")
     with patch("builtins.open", make_mock_open(files)):
         cfg = PackageConfig.from_file(path)
     assert cfg.env["ORIGIN_MYTOOL_MINOR_VERSION"] == "x"
@@ -145,6 +171,14 @@ def test_environment_config_parses_name(
     with patch("builtins.open", make_mock_open(all_files)):
         cfg = EnvironmentConfig.from_file(env_config_path)
     assert cfg.name == "MYSHOW"
+
+
+def test_environment_config_parses_repositories(
+    env_config_path: Path, all_files: dict[str, dict]
+) -> None:
+    with patch("builtins.open", make_mock_open(all_files)):
+        cfg = EnvironmentConfig.from_file(env_config_path)
+    assert cfg.repositories == ["/fake/project/packages", "/fake/studio/packages"]
 
 
 def test_environment_config_parses_packages(
@@ -196,8 +230,8 @@ def test_resolve_pythonpath_contains_package_roots(
 ) -> None:
     with patch("pathlib.Path.exists", return_value=True):
         resolved = resolver.resolve(["nuke"], base_env={})
-    assert "/fake/packages/pipelinecore/1.2.0" in resolved.env["PYTHONPATH"]
-    assert "/fake/packages/mytool/2.3.0" in resolved.env["PYTHONPATH"]
+    assert "pipelinecore/1.2.0" in resolved.env["PYTHONPATH"]
+    assert "mytool/2.3.0" in resolved.env["PYTHONPATH"]
 
 
 def test_resolve_sets_version_env_var(resolver: EnvironmentResolver) -> None:
@@ -219,6 +253,38 @@ def test_resolve_raises_on_unknown_loadout(resolver: EnvironmentResolver) -> Non
     with patch("pathlib.Path.exists", return_value=True):
         with pytest.raises(KeyError):
             resolver.resolve(["nonexistent"], base_env={})
+
+
+def test_resolve_uses_project_repository_before_studio(
+    env_config_path: Path, all_files: dict[str, dict]
+) -> None:
+    with patch("builtins.open", make_mock_open(all_files)):
+        with patch(
+            "pathlib.Path.exists",
+            make_exists_in("/fake/project/packages"),
+        ):
+            cfg = EnvironmentConfig.from_file(env_config_path)
+            resolver = EnvironmentResolver(cfg)
+            resolved = resolver.resolve(["nuke"], base_env={})
+
+    mytool_pkg = next(p for p in resolved.packages if p.name == "mytool")
+    assert "/fake/project/packages" in mytool_pkg.root.as_posix()
+
+
+def test_resolve_falls_back_to_studio_repository(
+    env_config_path: Path, all_files: dict[str, dict]
+) -> None:
+    with patch("builtins.open", make_mock_open(all_files)):
+        with patch(
+            "pathlib.Path.exists",
+            make_exists_in("/fake/studio/packages"),
+        ):
+            cfg = EnvironmentConfig.from_file(env_config_path)
+            resolver = EnvironmentResolver(cfg)
+            resolved = resolver.resolve(["base"], base_env={})
+
+    pipelinecore_pkg = next(p for p in resolved.packages if p.name == "pipelinecore")
+    assert "/fake/studio/packages" in pipelinecore_pkg.root.as_posix()
 
 
 # -----EnvironmentResolver._expand_loadouts------------------------------------
@@ -276,7 +342,7 @@ def test_resolve_raises_package_not_found(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
-        with patch("pathlib.Path.is_dir", return_value=False):
+        with patch("pathlib.Path.exists", return_value=False):
             cfg = EnvironmentConfig.from_file(env_config_path)
             resolver = EnvironmentResolver(cfg)
             with pytest.raises(PackageNotFoundError):

@@ -23,8 +23,8 @@ def launch(
     Custom environment variables are read from packages.
 
     Args:
-        executable (Union[str, os.PathLike]): The application executable to launch.
-        environment_config (Union[str, os.PathLike]): Path to the Environment.json file.
+        executable (str | os.PathLike): The application executable to launch.
+        environment_config (str | os.PathLike): Path to the Environment.json file.
         loadout (str): The loadout key to resolve from the environment config.
         base_env (Optional[dict[str, str]]): Environment to build on top of.
                 When omitted, the current process environment is used as the base.

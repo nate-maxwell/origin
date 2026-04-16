@@ -6,8 +6,9 @@ Unlike other environment abstraction frameworks, Origin is very simplistic and
 is meant for use by very small teams.
 """
 
-import os
+import hashlib
 import json
+import os
 import shutil
 from dataclasses import dataclass
 from dataclasses import field
@@ -131,7 +132,7 @@ class EnvironmentConfig(object):
 
     Attributes:
         name (str): The name of the show or environment this config represents.
-        packages_root (str): Root directory containing all versioned package
+        repositories (list[str]): Root directory containing all versioned package
             folders, structured as packages_root/name/version/.
         packages (dict[str, str]): Maps each package name to its version string.
         loadouts (dict[str, list[str]]): Maps a package name to a list of
@@ -140,7 +141,7 @@ class EnvironmentConfig(object):
     """
 
     name: str
-    packages_root: str
+    repositories: list[str] = field(default_factory=list)
     packages: dict[str, str] = field(default_factory=dict)
     loadouts: dict[str, list[str]] = field(default_factory=dict)
 
@@ -159,7 +160,7 @@ class EnvironmentConfig(object):
 
         return cls(
             name=data["name"],
-            packages_root=data["packages_root"],
+            repositories=data["repositories"],
             packages=data.get("packages", {}),
             loadouts=data.get("loadouts", {}),
         )
@@ -293,7 +294,8 @@ class EnvironmentResolver(object):
 
     def _find_uncached_package_dir(self, name: str, version: str) -> Path:
         """
-        Locate the versioned package directory on disk.
+        Locate the versioned package directory on disk, searching repositories
+        in order. The first repository containing the package is used.
 
         Args:
             name (str): Package name.
@@ -303,23 +305,31 @@ class EnvironmentResolver(object):
         Raises:
             PackageNotFoundError: If no matching directory is found.
         """
-        root = Path(self._cfg.packages_root)
-        candidate = root / name / version
-        if candidate.exists():
-            return candidate
+        searched = []
+        for repository in self._cfg.repositories:
+            candidate = Path(repository) / name / version
+            if candidate.exists():
+                return candidate
+            searched.append(repository)
 
-        raise PackageNotFoundError(
-            f"Package '{name}' version '{version}' not found. Searched: {root.as_posix()}"
-        )
+        err_msg = f"Package '{name}' version '{version}' not found. Searched: "
+        err_msg += ", ".join(searched)
+        raise PackageNotFoundError(err_msg)
 
     def _cache_and_find_package_dir(self, name: str, version: str) -> Path:
+        uncached_pkg_dir = self._find_uncached_package_dir(name, version)
+
+        # Hash the source repository path to create a stable, unique cache key.
+        repo_path = Path(uncached_pkg_dir.parent.parent).as_posix()
+        repo_hash = hashlib.md5(repo_path.encode()).hexdigest()[:8]
+
         root = origin.caching.get_package_cache_dir()
-        candidate = root / name / version
+        candidate = root / repo_hash / name / version
+
         if candidate.exists():
             return candidate
 
         candidate.mkdir(parents=True, exist_ok=True)
-        uncached_pkg_dir = self._find_uncached_package_dir(name, version)
         shutil.copytree(uncached_pkg_dir, candidate, dirs_exist_ok=True)
 
         return candidate

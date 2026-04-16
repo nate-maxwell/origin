@@ -1,5 +1,6 @@
 """Tests for caching.py and cached resolution in environment.py"""
 
+import hashlib
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -23,7 +24,9 @@ from tests.helpers import make_mock_open
 
 ENVIRONMENT_JSON = {
     "name": "MYSHOW",
-    "packages_root": "/fake/packages",
+    "repositories": [
+        "/fake/packages",
+    ],
     "packages": {
         "pipelinecore": "1.2.0",
     },
@@ -37,6 +40,10 @@ PIPELINECORE_PACKAGE_JSON = {
     "version": "1.2.0",
     "env": {},
 }
+
+# The cache key includes a hash of the repository path
+_REPO_HASH = hashlib.md5("/fake/packages".encode()).hexdigest()[:8]
+_CACHED_PACKAGE_JSON_PATH = f"/fake/cache/{_REPO_HASH}/pipelinecore/1.2.0/Package.json"
 
 
 # -----Fixtures----------------------------------------------------------------
@@ -52,7 +59,7 @@ def all_files(env_config_path: Path) -> dict[str, dict]:
     return {
         str(env_config_path): ENVIRONMENT_JSON,
         "/fake/packages/pipelinecore/1.2.0/Package.json": PIPELINECORE_PACKAGE_JSON,
-        "/fake/cache/pipelinecore/1.2.0/Package.json": PIPELINECORE_PACKAGE_JSON,
+        _CACHED_PACKAGE_JSON_PATH: PIPELINECORE_PACKAGE_JSON,
     }
 
 
@@ -122,7 +129,7 @@ def test_resolve_uses_cache_dir_when_caching_enabled(
     assert "/fake/cache" in resolved.env["PYTHONPATH"]
 
 
-def test_resolve_uses_packages_root_when_caching_disabled(
+def test_resolve_uses_repository_when_caching_disabled(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
     with patch("builtins.open", make_mock_open(all_files)):
@@ -138,7 +145,6 @@ def test_resolve_uses_packages_root_when_caching_disabled(
 def test_resolve_copies_package_to_cache_if_not_cached(
     env_config_path: Path, all_files: dict[str, dict]
 ) -> None:
-
     def exists_side_effect(self):
         normalized = str(self).replace("\\", "/")
         return "/fake/packages" in normalized and "Package.json" not in normalized
@@ -175,3 +181,13 @@ def test_resolve_skips_copy_if_already_cached(
                         resolver.resolve(["base"], base_env={})
 
     mock_copytree.assert_not_called()
+
+
+def test_cache_key_differs_per_repository(
+    env_config_path: Path, all_files: dict[str, dict]
+) -> None:
+    repo_a = "/fake/studio/packages"
+    repo_b = "/fake/project/packages"
+    hash_a = hashlib.md5(repo_a.encode()).hexdigest()[:8]
+    hash_b = hashlib.md5(repo_b.encode()).hexdigest()[:8]
+    assert hash_a != hash_b

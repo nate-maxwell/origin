@@ -6,11 +6,13 @@ packages root defined in an Environment.json file.
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Union
 
 from distlib.database import DistributionPath
 
@@ -57,24 +59,26 @@ _ignore_list = [
 ]
 
 
-def _publish_package(packages_root: Path, source_dir: Path) -> PackageConfig:
+def _publish_package(
+    repository: Union[str, os.PathLike], source_dir: Union[str, os.PathLike]
+) -> PackageConfig:
     """
     Copies the source dir as a package to the correct package path in the
     packages_root, based on config file for the package.
 
     Args:
-        packages_root (Path): The path to where packages are getting stored.
-        source_dir (Path): Path to the root of the package source directory.
-            Must contain a Package.json file.
+        repository (str | os.PathLike): The path to where packages are stored.
+        source_dir (str | os.PathLike): Path to the root of the package
+            source directory. Must contain a Package.json file.
     """
     # Package json
     package_json = Path(source_dir, "Package.json")
     if not package_json.exists():
-        err_msg = f"No Package.json file located in {source_dir.as_posix()}"
+        err_msg = f"No Package.json file located in {Path(source_dir).as_posix()}"
         raise PackageVersionNotExistsError(err_msg)
 
     pkg_cfg = PackageConfig.from_file(package_json)
-    package_version_path = Path(packages_root, pkg_cfg.name, pkg_cfg.version)
+    package_version_path = Path(repository, pkg_cfg.name, pkg_cfg.version)
 
     if Path(package_version_path, "Package.json").exists():
         err_msg = f"Package {pkg_cfg.name} version {pkg_cfg.version} already exists!"
@@ -91,7 +95,9 @@ def _publish_package(packages_root: Path, source_dir: Path) -> PackageConfig:
     return pkg_cfg
 
 
-def publish_package(packages_root: Path, source_dir: Path) -> None:
+def publish_package(
+    repository: Union[str, os.PathLike], source_dir: Union[str, os.PathLike]
+) -> None:
     """
     Publish a package from a source directory to the packages root.
 
@@ -106,9 +112,9 @@ def publish_package(packages_root: Path, source_dir: Path) -> None:
        exact point in source history.
 
     Args:
-        packages_root (Path): The path to where packages are getting stored.
-        source_dir (Path): Path to the root of the package source directory.
-            Must contain a Package.json file.
+        repository (str | os.PathLike): The path to where packages are stored.
+        source_dir (str | os.PathLike): Path to the root of the package
+            source directory. Must contain a Package.json file.
     Raises:
         PackageVersionNotExistsError: If no Package.json is found in source_dir.
         PackageVersionExistsError: If the package version has already been
@@ -118,12 +124,12 @@ def publish_package(packages_root: Path, source_dir: Path) -> None:
         UncommittedChangesError: If the source repository has uncommitted changes.
         UnpushedCommitsError: If the source repository has unpushed commits.
     """
-    pkg_cfg = _publish_package(packages_root, source_dir)
+    pkg_cfg = _publish_package(repository, source_dir)
     origin.git_utils.check_git_available()
     origin.git_utils.create_and_push_tag(source_dir, pkg_cfg.version)
 
 
-def pip_publish(packages_root: Path, package_name: str) -> None:
+def pip_publish(repository: Union[str, os.PathLike], package_name: str) -> None:
     """
     Download a package from PyPI using pip, merge all installed distributions
     into a single Origin package, and publish it to the packages root.
@@ -135,7 +141,7 @@ def pip_publish(packages_root: Path, package_name: str) -> None:
     arise when distributions expect their dependencies to be co-located.
 
     Args:
-        packages_root (Path): The path to where packages are getting stored.
+        repository (str | os.PathLike): The path to where packages are stored.
         package_name (str): The PyPI package name to install, e.g. "requests"
             or "numpy==1.26.0".
     Raises:
@@ -197,4 +203,4 @@ def pip_publish(packages_root: Path, package_name: str) -> None:
             )
             f.write(json_str)
 
-        _publish_package(packages_root, staging_dir)
+        _publish_package(repository, staging_dir)

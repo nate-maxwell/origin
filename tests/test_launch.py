@@ -13,7 +13,9 @@ from tests.helpers import make_mock_open
 
 ENVIRONMENT_JSON = {
     "name": "MYSHOW",
-    "packages_root": "/fake/packages",
+    "repositories": [
+        "/fake/packages",
+    ],
     "packages": {
         "mytool": "2.3.0",
     },
