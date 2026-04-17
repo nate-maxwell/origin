@@ -42,6 +42,8 @@ Each package lives at `repository/name/version/` and contains a `Package.json`:
 {
     "name": "mytool",
     "version": "2.3.0",
+    "authors": ["Marty McFly"],
+    "description": "My super cool python tool.",
     "env": {
         "MYTOOL_ROOT": "T:/studio/packages/mytool/2.3.0"
     }
