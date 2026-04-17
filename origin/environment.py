@@ -268,9 +268,8 @@ class EnvironmentResolver(object):
 
         for loadout in loadouts:
             if loadout in seen_loadouts:
-                raise RecursionError(
-                    f"Circular loadout reference detected: '{loadout}'"
-                )
+                err_msg = f"Circular loadout reference detected: '{loadout}'"
+                raise RecursionError(err_msg)
             seen_loadouts.add(loadout)
 
             for entry in self._cfg.loadouts[loadout]:
@@ -317,6 +316,21 @@ class EnvironmentResolver(object):
         raise PackageNotFoundError(err_msg)
 
     def _cache_and_find_package_dir(self, name: str, version: str) -> Path:
+        """
+        Locate a package directory, copying it to the local cache if not already
+        cached. The cache key is derived from the source repository path, package
+        name, and version, ensuring that the same package version from different
+        repositories is cached separately.
+
+        Args:
+            name (str): Package name.
+            version (str): Version string.
+        Returns:
+            Path: Absolute path to the cached package version directory.
+        Raises:
+            PackageNotFoundError: If the package cannot be found in any repository.
+        """
+
         uncached_pkg_dir = self._find_uncached_package_dir(name, version)
 
         # Hash the source repository path to create a stable, unique cache key.
@@ -335,6 +349,25 @@ class EnvironmentResolver(object):
         return candidate
 
     def _resolve_package(self, name: str) -> Package:
+        """
+        Resolve a package by name into a fully populated Package instance.
+
+        Looks up the version from the environment config, locates the package
+        directory on disk (using the cache if caching is enabled), reads the
+        Package.json, and returns a Package with all version environment variables
+        injected.
+
+        Args:
+            name (str): Package name.
+        Returns:
+            Package: The fully resolved package.
+        Raises:
+            VersionNotSpecifiedError: If the package has no version declared in
+                the environment config.
+            PackageNotFoundError: If the versioned package directory cannot be
+                found in any repository.
+        """
+
         try:
             version = self._cfg.packages[name]
         except KeyError:
