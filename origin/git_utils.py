@@ -5,7 +5,6 @@ Reusable common git operations.
 """
 
 import os
-from typing import Optional
 from typing import Union
 
 import git
@@ -33,6 +32,7 @@ def check_git_available() -> None:
 
 
 def check_repo_is_clean(repo_path: Union[str, os.PathLike]) -> None:
+    """Given a path to a git repo, will raise if the repository repo is dirty."""
     repo = git.Repo(repo_path)
     if repo.is_dirty(untracked_files=True):
         err_msg = f"Repository at '{repo_path}' has uncommitted changes."
