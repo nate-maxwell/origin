@@ -3,7 +3,7 @@
 Origin supports publishing of first-party packages, those you have the sourcecode
 for, and publishing third-party packages found on [PyPi](https://pypi.org/).
 
-### publish_package()
+## publish_package()
 
 Publishes a package from a source directory to a repository. Copies the source
 to `repository/name/version/` as defined by the `Package.json` found in the
@@ -31,7 +31,7 @@ After publishing, add the package to your `Environment.json` manually:
 }
 ```
 
-#### What gets excluded
+### What gets excluded
 
 The following are excluded from the copy:
 
@@ -41,7 +41,7 @@ The following are excluded from the copy:
 - Git metadata (`.git`, `.gitignore`, `.github`)
 - Package build artifacts (`*.egg-info`)
 
-### pip_publish()
+## pip_publish()
 
 Downloads a package from PyPI and publishes it to a repository as a single
 Origin package. All distributions installed as dependencies are merged into one

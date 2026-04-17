@@ -1,6 +1,6 @@
 # Applications and Launching
 
-### launch()
+## launch()
 
 Reads an `Environment.json`, resolves the specified loadout, and launches an
 executable in the resulting environment. Returns an `Application` instance.
@@ -24,23 +24,23 @@ All environment variable customisation flows through packages — `launch()` doe
 not accept ad-hoc environment overrides. If a variable needs to be set for an
 application, it belongs in a `Package.json`.
 
-### Application
+## Application
 
 A thin wrapper around `subprocess.Popen` returned by `launch()`. Holds the
 executable path, the loadout name, the underlying process handle, and the
 `ResolvedEnvironment` the application was launched with.
 
-#### wait()
+### wait()
 
 Blocks until the application exits and returns its exit code. Use this when
 you want to perform follow-up actions after the application closes.
 
-#### poll()
+### poll()
 
 Checks whether the application has exited without blocking. Returns the exit
 code if the process has finished, or `None` if it is still running.
 
-#### has_crashed
+### has_crashed
 
 A property that returns `True` if the application has exited with a non-zero
 exit code. Intended to be checked after `wait()` to determine whether follow-up

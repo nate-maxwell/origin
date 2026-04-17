@@ -1,4 +1,4 @@
-### EnvironmentResolver
+# EnvironmentResolver
 
 Takes an `EnvironmentConfig` and resolves one or more loadouts into a
 `ResolvedEnvironment`. The resolver handles the full resolution pipeline:
@@ -32,7 +32,7 @@ When caching is enabled, located packages are copied to the local cache before
 being used. The cache key includes a hash of the source repository path, ensuring
 that the same package version from different repositories is cached separately.
 
-### ResolvedEnvironment
+## ResolvedEnvironment
 
 The output of a single `resolve()` call. Contains the fully built environment
 dictionary, ready to pass directly to `subprocess.Popen(env=...)`, and the

@@ -14,18 +14,18 @@ to the environment. Each versioned package directory on disk contains a
 taken as literal strings with no token expansion — if a package needs to
 reference a path, the full path should be written explicitly.
 
-#### name
+### name
 
 The canonical name of the package. Must match the name used in the
 `Environment.json` `packages` section.
 
-#### version
+### version
 
 The version string for this package. Should match the version declared in the
 `Environment.json` `packages` section. Can be any string — Origin does not
 enforce semantic versioning, though `major.minor.patch` is recommended.
 
-#### env
+### env
 
 A mapping of environment variable names to their values. Every variable declared
 here will be set in the environment before the application launches. Values are
@@ -44,7 +44,7 @@ literal strings — no token expansion is performed.
 }
 ```
 
-#### Automatic version variables
+### Automatic version variables
 
 Origin automatically injects version environment variables for every package,
 derived from the version string in `Package.json`. For a package named `mytool`
