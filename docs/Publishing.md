@@ -35,7 +35,7 @@ packages:
 The following are excluded from the copy:
 
 - Virtual environments (`venv`, `.venv`, `env`, `.env`)
-- Python caches (`__pycache__`, `*.pyc`, `*.pyi`)
+- Python caches (`__pycache__`, `*.pyc`)
 - Editor configs (`.vscode`, `.idea`)
 - Git metadata (`.git`, `.gitignore`, `.github`)
 - Package build artifacts (`*.egg-info`)
