@@ -1,9 +1,9 @@
 # Environment Config
 
-The `Environment.json` file is the project configuration file. Each project has
-its own `Environment.json` that declares the authoritative version of every
+The `environment.yaml` file is the project configuration file. Each project has
+its own `environment.yaml` that declares the authoritative version of every
 package available to that project and defines the loadouts used to launch
-applications. Multiple projects can share repositories — their `Environment.json`
+applications. Multiple projects can share repositories — their `environment.yaml`
 files simply declare different versions of the packages they need.
 
 ## name
@@ -19,11 +19,10 @@ finds. This allows project-specific packages to shadow studio-level packages —
 place the project repository before the studio repository and any package present
 in both will resolve to the project version.
 
-```json
-"repositories": [
-    "T:/shows/MYPROJECT/packages",
-    "T:/studio/packages"
-]
+```yaml
+repositories:
+  - T:/project/packages
+  - T:/facility/packages
 ```
 
 ## packages
@@ -32,12 +31,13 @@ A flat mapping of package names to version strings. This is the authoritative
 list of which version of each package this project uses. Every package referenced
 in a loadout must have an entry here.
 
-```json
-"packages": {
-    "pipelinecore": "1.2.0",
-    "mytool": "2.3.0",
-    "PySide6": "6.11.0"
-}
+```yaml
+packages:
+  pipelinecore: 1.2.0
+  app_essentials: 1.0.1
+  colour: 0.4.2
+  service: 15.0.1
+  mytool: 2.3.0
 ```
 
 ## loadouts
@@ -47,10 +47,13 @@ Each loadout defines the set of packages to resolve when launching a specific
 application. Loadouts can reference other loadouts by name, allowing shared
 base configurations to be declared once and reused across multiple applications.
 
-```json
-"loadouts": {
-    "base": ["pipelinecore"],
-    "nuke": ["base", "colour", "mytool"],
-    "unreal": ["base", "PySide6"]
-}
+```yaml
+loadouts:
+  nuke:
+    - colour
+    - mytool
+    - myapp
+  myapp:
+    - pipelinecore
+    - app_essentials
 ```

@@ -6,7 +6,7 @@ for, and publishing third-party packages found on [PyPi](https://pypi.org/).
 ## publish_package()
 
 Publishes a package from a source directory to a repository. Copies the source
-to `repository/name/version/` as defined by the `Package.json` found in the
+to `repository/name/version/` as defined by the `package.yaml` found in the
 source directory, then creates and pushes a version tag in the source git
 repository. The git step ensures every deployed artifact is traceable to an
 exact point in source history.
@@ -23,12 +23,11 @@ publish_package(
 The publish will refuse to proceed if the repository has uncommitted changes or
 unpushed commits.
 
-After publishing, add the package to your `Environment.json` manually:
+After publishing, add the package to your `environment.yaml` manually:
 
-```json
-"packages": {
-    "mytool": "2.3.0"
-}
+```yaml
+packages: 
+  mytool: 2.3.0
 ```
 
 ### What gets excluded
@@ -36,7 +35,7 @@ After publishing, add the package to your `Environment.json` manually:
 The following are excluded from the copy:
 
 - Virtual environments (`venv`, `.venv`, `env`, `.env`)
-- Python caches (`__pycache__`, `*.pyc`)
+- Python caches (`__pycache__`, `*.pyc`, `*.pyi`)
 - Editor configs (`.vscode`, `.idea`)
 - Git metadata (`.git`, `.gitignore`, `.github`)
 - Package build artifacts (`*.egg-info`)
@@ -68,7 +67,7 @@ origin.pip_publish(
 ```
 
 After publishing, the package is automatically added to the `packages` section
-of the `Environment.json` file passed as `environment_config`. The package can
+of the `environment.yaml` file passed as `environment_config`. The package can
 then be referenced in loadouts like any other package.
 
 PyPI packages are generally best published to a studio-level repository rather

@@ -14,40 +14,45 @@ platform variant system.
 
 **1. Define your project environment.**
 
-Create an `Environment.json` for your project:
+Create an `environment.yaml` for your project:
 
-```json
-{
-    "name": "MY_PROJECT",
-    "repositories": [
-        "T:/shows/MY_PROJECT/packages",
-        "T:/studio/packages"
-    ],
-    "packages": {
-        "pipelinecore": "1.2.0",
-        "mytool": "2.3.0"
-    },
-    "loadouts": {
-        "base": ["pipelinecore"],
-        "nuke": ["base", "mytool"]
-    }
-}
+```yaml
+name: MY_PROJECT
+
+repositories:
+  - T:/project/packages
+  - T:/facility/packages
+
+packages:
+  pipelinecore: 1.2.0
+  app_essentials: 1.0.1
+  colour: 0.4.2
+  service: 15.0.1
+  mytool: 2.3.0
+
+loadouts:
+  nuke:
+    - colour
+    - mytool
+    - myapp
+  myapp:
+    - pipelinecore
+    - app_essentials
+
 ```
 
 **2. Define your packages.**
 
-Each package lives at `repository/name/version/` and contains a `Package.json`:
+Each package lives at `repository/name/version/` and contains a `package.yaml`:
 
-```json
-{
-    "name": "mytool",
-    "version": "2.3.0",
-    "authors": ["Marty McFly"],
-    "description": "My super cool python tool.",
-    "env": {
-        "MYTOOL_ROOT": "T:/studio/packages/mytool/2.3.0"
-    }
-}
+```yaml
+name: hello_world
+authors:
+  - Marty McFly
+description: Python-based hello world example package.
+version: 1.0.0
+env: {}
+
 ```
 
 **3. Launch an application.**

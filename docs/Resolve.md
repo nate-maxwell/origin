@@ -7,7 +7,7 @@ Takes an `EnvironmentConfig` and resolves one or more loadouts into a
   ordered, deduplicated list of package names
 - Looks up each package version from the `packages` section of the config
 - Searches repositories in order to locate the versioned package directory on disk
-- Reads and parses the `Package.json` from the located directory
+- Reads and parses the `package.yaml` from the located directory
 - Prepends the package root to `PYTHONPATH`
 - Merges the package's `env` contributions into the accumulating environment
 

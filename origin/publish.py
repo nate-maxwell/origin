@@ -38,6 +38,7 @@ _ignore_list = [
     ".vscode",
     ".idea",
     "*.pyc",
+    "*.pyi",
     "__pycache__",
     ".git",
     ".gitignore",
