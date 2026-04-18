@@ -11,7 +11,7 @@ from tests.helpers import make_mock_open
 
 # -----Test data---------------------------------------------------------------
 
-ENVIRONMENT_JSON = {
+ENVIRONMENT_YAML = {
     "name": "MYSHOW",
     "repositories": [
         "/fake/packages",
@@ -24,7 +24,7 @@ ENVIRONMENT_JSON = {
     },
 }
 
-MYTOOL_PACKAGE_JSON = {
+MYTOOL_PACKAGE_YAML = {
     "name": "mytool",
     "version": "2.3.0",
     "env": {
@@ -38,14 +38,14 @@ MYTOOL_PACKAGE_JSON = {
 
 @pytest.fixture()
 def env_config_path() -> Path:
-    return Path("/fake/shows/MYSHOW/Environment.json")
+    return Path("/fake/shows/MYSHOW/environment.yaml")
 
 
 @pytest.fixture()
 def all_files(env_config_path: Path) -> dict[str, dict]:
     return {
-        str(env_config_path): ENVIRONMENT_JSON,
-        "/fake/packages/mytool/2.3.0/Package.json": MYTOOL_PACKAGE_JSON,
+        str(env_config_path): ENVIRONMENT_YAML,
+        "/fake/packages/mytool/2.3.0/package.yaml": MYTOOL_PACKAGE_YAML,
     }
 
 

@@ -7,7 +7,6 @@ is meant for use by very small teams.
 """
 
 import hashlib
-import json
 import os
 import shutil
 from dataclasses import dataclass
@@ -17,12 +16,24 @@ from typing import Optional
 from typing import Union
 
 import origin.caching
+import origin.config
 
 # -----Exceptions--------------------------------------------------------------
 
 
 class PackageNotFoundError(Exception):
-    """Raised when a package directory or config cannot be located on disk."""
+    """Raised when a package directory or config could not be located."""
+
+
+class PackageConfigError(Exception):
+    """Raised when a package directory or config cannot be loaded from disk."""
+
+
+class EnvironmentConfigError(Exception):
+    """
+    Raised when an environment directory or config cannot be located or loaded
+    from disk.
+    """
 
 
 class VersionNotSpecifiedError(Exception):
@@ -97,9 +108,14 @@ class PackageConfig(object):
             path (Union[str, os.PathLike]): Path to the Package.json file.
         Returns:
             PackageConfig: The parsed config with raw, unexpanded values.
+        Raises:
+            PackageConfigError: If the package.yaml file could not be found or
+                loaded.
         """
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = origin.config.import_data_from_yaml(path)
+        if data is None:
+            msg = f"Could not import package data for {str(path)}!"
+            raise PackageConfigError(msg)
 
         _name = str(data["name"])
 
@@ -154,9 +170,14 @@ class EnvironmentConfig(object):
             path (Union[str, os.PathLike]): Path to the Environment.json file.
         Returns:
             EnvironmentConfig: The parsed config.
+        Raises:
+            EnvironmentConfigError: If the environment.yaml file could not be
+                found or loaded.
         """
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = origin.config.import_data_from_yaml(path)
+        if data is None:
+            msg = f"Could not import environment data for {str(path)}!"
+            raise EnvironmentConfigError(msg)
 
         return cls(
             name=data["name"],
@@ -313,7 +334,7 @@ class EnvironmentResolver(object):
 
         err_msg = f"Package '{name}' version '{version}' not found. Searched: "
         err_msg += ", ".join(searched)
-        raise PackageNotFoundError(err_msg)
+        raise PackageConfigError(err_msg)
 
     def _cache_and_find_package_dir(self, name: str, version: str) -> Path:
         """
@@ -379,7 +400,7 @@ class EnvironmentResolver(object):
         else:
             pkg_dir = self._find_uncached_package_dir(name, version)
 
-        pkg_config = PackageConfig.from_file(pkg_dir / "Package.json")
+        pkg_config = PackageConfig.from_file(pkg_dir / "package.yaml")
 
         return Package(
             name=name,

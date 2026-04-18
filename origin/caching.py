@@ -15,6 +15,14 @@ def get_caching_enabled() -> bool:
     return caching == CACHING_ENABLED
 
 
+def enable_caching() -> None:
+    os.environ[ENV_CACHING] = CACHING_ENABLED
+
+
+def disable_caching() -> None:
+    os.environ[ENV_CACHING] = CACHING_DISABLED
+
+
 def get_package_cache_dir() -> Path:
     """
     Return the platform-appropriate root directory for Origin's cache.

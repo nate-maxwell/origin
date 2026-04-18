@@ -1,3 +1,4 @@
 pytest
 distlib
 gitpython
+pyyaml

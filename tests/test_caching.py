@@ -22,7 +22,7 @@ from tests.helpers import make_mock_open
 
 # -----Test data---------------------------------------------------------------
 
-ENVIRONMENT_JSON = {
+ENVIRONMENT_YAML = {
     "name": "MYSHOW",
     "repositories": [
         "/fake/packages",
@@ -35,7 +35,7 @@ ENVIRONMENT_JSON = {
     },
 }
 
-PIPELINECORE_PACKAGE_JSON = {
+PIPELINECORE_PACKAGE_YAML = {
     "name": "pipelinecore",
     "version": "1.2.0",
     "env": {},
@@ -43,7 +43,7 @@ PIPELINECORE_PACKAGE_JSON = {
 
 # The cache key includes a hash of the repository path
 _REPO_HASH = hashlib.md5("/fake/packages".encode()).hexdigest()[:8]
-_CACHED_PACKAGE_JSON_PATH = f"/fake/cache/{_REPO_HASH}/pipelinecore/1.2.0/Package.json"
+_CACHED_PACKAGE_YAML_PATH = f"/fake/cache/{_REPO_HASH}/pipelinecore/1.2.0/package.yaml"
 
 
 # -----Fixtures----------------------------------------------------------------
@@ -51,15 +51,15 @@ _CACHED_PACKAGE_JSON_PATH = f"/fake/cache/{_REPO_HASH}/pipelinecore/1.2.0/Packag
 
 @pytest.fixture()
 def env_config_path() -> Path:
-    return Path("/fake/shows/MYSHOW/Environment.json")
+    return Path("/fake/shows/MYSHOW/environment.yaml")
 
 
 @pytest.fixture()
 def all_files(env_config_path: Path) -> dict[str, dict]:
     return {
-        str(env_config_path): ENVIRONMENT_JSON,
-        "/fake/packages/pipelinecore/1.2.0/Package.json": PIPELINECORE_PACKAGE_JSON,
-        _CACHED_PACKAGE_JSON_PATH: PIPELINECORE_PACKAGE_JSON,
+        str(env_config_path): ENVIRONMENT_YAML,
+        "/fake/packages/pipelinecore/1.2.0/package.yaml": PIPELINECORE_PACKAGE_YAML,
+        _CACHED_PACKAGE_YAML_PATH: PIPELINECORE_PACKAGE_YAML,
     }
 
 
@@ -147,7 +147,11 @@ def test_resolve_copies_package_to_cache_if_not_cached(
 ) -> None:
     def exists_side_effect(self):
         normalized = str(self).replace("\\", "/")
-        return "/fake/packages" in normalized and "Package.json" not in normalized
+        if "/fake/shows" in normalized:
+            return True
+        if "/fake/cache" in normalized and "package.yaml" in normalized:
+            return True
+        return "/fake/packages" in normalized and "package.yaml" not in normalized
 
     with patch("builtins.open", make_mock_open(all_files)):
         with patch("pathlib.Path.exists", exists_side_effect):

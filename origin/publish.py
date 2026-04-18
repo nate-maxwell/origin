@@ -5,7 +5,6 @@ Provides tooling for publishing a package from a source directory to the
 packages root defined in an Environment.json file.
 """
 
-import json
 import os
 import re
 import shutil
@@ -17,6 +16,7 @@ from typing import Union
 from distlib.database import DistributionPath
 
 import origin.git_utils
+import origin.config
 from origin.environment import PackageConfig
 
 
@@ -29,7 +29,7 @@ class PackageVersionExistsError(Exception):
 
 class PackageVersionNotExistsError(Exception):
     """
-    Raised when attempting to publish a package with a Package.json that cannot
+    Raised when attempting to publish a package with a package.yaml that cannot
     be found.
     """
 
@@ -66,7 +66,7 @@ def publish_package(
     Publish a package from a source directory to a repository.
 
     A publish operation does the following:
-    1. Reads the Package.json in the source directory to determine the
+    1. Reads the package.yaml in the source directory to determine the
        package name and version.
     2. Copies the source directory to a temporary location in the repository,
        excluding development artifacts such as virtual environments, caches,
@@ -84,9 +84,9 @@ def publish_package(
     Args:
         repository (str | os.PathLike): Path to the repository to publish into.
         source_dir (str | os.PathLike): Path to the root of the package source
-            directory. Must contain a Package.json file.
+            directory. Must contain a package.yaml file.
     Raises:
-        PackageVersionNotExistsError: If no Package.json is found in source_dir.
+        PackageVersionNotExistsError: If no package.yaml is found in source_dir.
         PackageVersionExistsError: If the package version has already been
             published to the repository.
         git.GitCommandError: If the version tag push fails.
@@ -94,16 +94,16 @@ def publish_package(
         UncommittedChangesError: If the source repository has uncommitted changes.
     """
     repo_path = Path(repository)
-    package_json = Path(source_dir, "Package.json")
+    package_json = Path(source_dir, "package.yaml")
 
     if not package_json.exists():
-        err_msg = f"No Package.json file located in {Path(source_dir).as_posix()}"
+        err_msg = f"No package.yaml file located in {Path(source_dir).as_posix()}"
         raise PackageVersionNotExistsError(err_msg)
 
     pkg_cfg = PackageConfig.from_file(package_json)
     package_version_path = repo_path / pkg_cfg.name / pkg_cfg.version
 
-    if Path(package_version_path, "Package.json").exists():
+    if Path(package_version_path, "package.yaml").exists():
         err_msg = f"Package {pkg_cfg.name} version {pkg_cfg.version} already exists!"
         raise PackageVersionExistsError(err_msg)
 
@@ -184,13 +184,14 @@ def pip_publish(repository: Union[str, os.PathLike], package_name: str) -> None:
             raise RuntimeError(err_msg)
 
         package_version_path = repo_path / loadout_name / top_dist.version
-        if Path(package_version_path, "Package.json").exists():
+        if Path(package_version_path, "package.yaml").exists():
             err = f"Package {loadout_name} version {top_dist.version} already exists!"
             raise PackageVersionExistsError(err)
 
         # Merge all distributions into a staging directory then rename into place
         staging_dir = tmp_path / f"_staging_{loadout_name}"
         staging_dir.mkdir()
+        tmp_dest = None
 
         try:
             for distribution in distributions:
@@ -202,13 +203,8 @@ def pip_publish(repository: Union[str, os.PathLike], package_name: str) -> None:
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, dst)
 
-            with open(staging_dir / "Package.json", "w", encoding="utf-8") as f:
-                f.write(
-                    json.dumps(
-                        {"name": loadout_name, "version": top_dist.version, "env": {}},
-                        indent=4,
-                    )
-                )
+            data = {"name": loadout_name, "version": top_dist.version, "env": {}}
+            origin.config.export_data_to_yaml(Path(staging_dir, "package.yaml"), data)
 
             tmp_dest = repo_path / loadout_name / f"_tmp_{top_dist.version}"
             tmp_dest.parent.mkdir(parents=True, exist_ok=True)
@@ -216,6 +212,6 @@ def pip_publish(repository: Union[str, os.PathLike], package_name: str) -> None:
             tmp_dest.rename(package_version_path)
 
         except Exception:
-            if tmp_dest.exists():
+            if tmp_dest is not None and tmp_dest.exists():
                 shutil.rmtree(tmp_dest)
             raise

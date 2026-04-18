@@ -1,0 +1,21 @@
+name: MY_PROJECT
+
+repositories:
+  - T:/project/packages
+  - T:/facility/packages
+
+packages:
+  pipelinecore: 1.2.0
+  app_essentials: 1.0.1
+  colour: 0.4.2
+  service: 15.0.1
+  mytool: 2.3.0
+
+loadouts:
+  nuke:
+    - colour
+    - mytool
+    - myapp
+  myapp:
+    - pipelinecore
+    - app_essentials
