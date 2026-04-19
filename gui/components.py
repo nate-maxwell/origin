@@ -1,3 +1,5 @@
+from typing import Callable
+
 from PySide6 import QtWidgets
 
 from gui import style
@@ -21,8 +23,28 @@ def make_divider() -> QtWidgets.QFrame:
     return f
 
 
+def make_info_field(
+    label_text: str, value: str
+) -> tuple[QtWidgets.QWidget, QtWidgets.QLabel]:
+    container = QtWidgets.QWidget()
+    vl = QtWidgets.QVBoxLayout(container)
+    vl.setContentsMargins(0, 0, 0, 0)
+    vl.setSpacing(4)
+    lbl = make_label(label_text)
+    val = QtWidgets.QLabel(value)
+    val.setObjectName("value_label")
+    val.setStyleSheet(
+        f"font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px;"
+        f"color: {style.COLORS['text_primary']}; background: transparent; border: none;"
+        f"text-transform: none; letter-spacing: 0px; font-weight: 400;"
+    )
+    vl.addWidget(lbl)
+    vl.addWidget(val)
+    return container, val
+
+
 def path_row(
-    label_text: str, placeholder: str, browse_fn
+    label_text: str, placeholder: str, browse_fn: Callable
 ) -> tuple[QtWidgets.QWidget, QtWidgets.QLineEdit]:
     """A label + path field + browse button row."""
     container = QtWidgets.QWidget()

@@ -8,6 +8,7 @@ from origin import Package
 from origin import ResolvedEnvironment
 from origin import EnvironmentConfig
 from origin import EnvironmentResolver
+from origin import EnvironmentConfigError
 
 from gui import components
 from gui import style
@@ -18,43 +19,39 @@ class PackageBrowserPanel(QtWidgets.QWidget):
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
         self._resolved: Optional[ResolvedEnvironment] = None
-        self._build_ui()
+        self._create_widgets()
+        self._create_layouts()
+        self._create_connections()
 
-    def _build_ui(self) -> None:
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+    def _create_widgets(self) -> None:
+        self.layout = QtWidgets.QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
 
-        # Header
-        header = QtWidgets.QLabel("Package Browser")
-        header.setObjectName("panel_header")
-        layout.addWidget(header)
+        self.header = QtWidgets.QLabel("Package Browser")
+        self.header.setObjectName("panel_header")
 
-        desc = QtWidgets.QLabel(
-            "Resolve an environment config to inspect packages and environment variables."
-        )
-        desc.setObjectName("panel_desc")
-        layout.addWidget(desc)
-
-        layout.addWidget(components.make_divider())
+        _t = "Resolve an environment config to inspect packages and environment variables."
+        self.desc = QtWidgets.QLabel(_t)
+        self.desc.setObjectName("panel_desc")
 
         # Config path
-        layout.addWidget(components.make_section("Environment Config"))
-        config_row, self._config_field = components.path_row(
+        self.layout.addWidget(components.make_section("Environment Config"))
+        self.config_row, self._config_field = components.path_row(
             "Config Path",
             "/path/to/environment.yaml",
             self._browse_config,
         )
-        layout.addWidget(config_row)
 
         # Loadout selector
-        loadout_container = QtWidgets.QWidget()
-        loadout_layout = QtWidgets.QVBoxLayout(loadout_container)
-        loadout_layout.setContentsMargins(28, 0, 28, 0)
-        loadout_layout.setSpacing(6)
-        loadout_layout.addWidget(components.make_label("Loadout"))
-        loadout_row = QtWidgets.QHBoxLayout()
-        loadout_row.setSpacing(8)
+        self.loadout_container = QtWidgets.QWidget()
+        self.loadout_layout = QtWidgets.QVBoxLayout(self.loadout_container)
+        self.loadout_layout.setContentsMargins(28, 0, 28, 0)
+        self.loadout_layout.setSpacing(6)
+
+        self.loadout_row = QtWidgets.QHBoxLayout()
+        self.loadout_row.setSpacing(8)
+
         self._loadout_combo = QtWidgets.QComboBox()
         self._loadout_combo.setPlaceholderText("Select a loadout...")
         self._loadout_combo.setEnabled(False)
@@ -62,20 +59,11 @@ class PackageBrowserPanel(QtWidgets.QWidget):
         self._resolve_btn.setObjectName("btn_primary")
         self._resolve_btn.setFixedHeight(36)
         self._resolve_btn.setEnabled(False)
-        self._resolve_btn.clicked.connect(self._resolve)
-        loadout_row.addWidget(self._loadout_combo)
-        loadout_row.addWidget(self._resolve_btn)
-        loadout_layout.addLayout(loadout_row)
-        layout.addWidget(loadout_container)
-
-        self._config_field.textChanged.connect(self._on_config_changed)
 
         # Results splitter
-        layout.addWidget(components.make_section("Resolved Packages"))
-
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
-        splitter.setContentsMargins(28, 0, 28, 16)
-        splitter.setHandleWidth(1)
+        self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        self.splitter.setContentsMargins(28, 0, 28, 16)
+        self.splitter.setHandleWidth(1)
 
         # Package list (left)
         self._pkg_tree = QtWidgets.QTreeWidget()
@@ -91,18 +79,17 @@ class PackageBrowserPanel(QtWidgets.QWidget):
         self._pkg_tree.header().setSectionResizeMode(
             2, QtWidgets.QHeaderView.ResizeMode.Stretch
         )
-        self._pkg_tree.itemSelectionChanged.connect(self._on_package_selected)
-        splitter.addWidget(self._pkg_tree)
 
         # Env vars (right)
-        right = QtWidgets.QWidget()
-        right_layout = QtWidgets.QVBoxLayout(right)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(0)
+        self.right = QtWidgets.QWidget()
+        self.right_layout = QtWidgets.QVBoxLayout(self.right)
+        self.right_layout.setContentsMargins(0, 0, 0, 0)
+        self.right_layout.setSpacing(0)
+
         self._env_label = QtWidgets.QLabel("ENV VARS")
         self._env_label.setObjectName("section_label")
         self._env_label.setContentsMargins(0, 0, 0, 6)
-        right_layout.addWidget(self._env_label)
+
         self._env_table = QtWidgets.QTableWidget()
         self._env_table.setColumnCount(2)
         self._env_table.setHorizontalHeaderLabels(["Variable", "Value"])
@@ -120,11 +107,32 @@ class PackageBrowserPanel(QtWidgets.QWidget):
         self._env_table.setSelectionBehavior(
             QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
         )
-        right_layout.addWidget(self._env_table)
-        splitter.addWidget(right)
 
-        splitter.setSizes([340, 460])
-        layout.addWidget(splitter, stretch=1)
+    def _create_layouts(self) -> None:
+        self.layout.addWidget(self.header)
+        self.layout.addWidget(self.desc)
+        self.layout.addWidget(components.make_divider())
+
+        self.layout.addWidget(self.config_row)
+
+        self.loadout_layout.addWidget(components.make_label("Loadout"))
+        self.loadout_row.addWidget(self._loadout_combo)
+        self.loadout_row.addWidget(self._resolve_btn)
+        self.loadout_layout.addLayout(self.loadout_row)
+        self.layout.addWidget(self.loadout_container)
+
+        self.layout.addWidget(components.make_section("Resolved Packages"))
+        self.splitter.addWidget(self._pkg_tree)
+        self.right_layout.addWidget(self._env_label)
+        self.right_layout.addWidget(self._env_table)
+        self.splitter.addWidget(self.right)
+        self.splitter.setSizes([340, 460])
+        self.layout.addWidget(self.splitter, stretch=1)
+
+    def _create_connections(self) -> None:
+        self._resolve_btn.clicked.connect(self._resolve)
+        self._config_field.textChanged.connect(self._on_config_changed)
+        self._pkg_tree.itemSelectionChanged.connect(self._on_package_selected)
 
     def _browse_config(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -149,7 +157,7 @@ class PackageBrowserPanel(QtWidgets.QWidget):
                 self._loadout_combo.addItem(name)
             self._loadout_combo.setEnabled(True)
             self._resolve_btn.setEnabled(True)
-        except Exception:
+        except EnvironmentConfigError:
             pass
 
     def _resolve(self) -> None:
@@ -197,17 +205,17 @@ class PackageBrowserPanel(QtWidgets.QWidget):
             return
         pkg: Package = items[0].data(0, QtCore.Qt.ItemDataRole.UserRole)
         if pkg:
-            self._populate_env_table(pkg.env, highlight=True)
+            self._populate_env_table(pkg.env)
 
-    def _populate_env_table(self, env: dict, highlight: bool = False) -> None:
+    def _populate_env_table(self, env: dict) -> None:
         mono_font = QtGui.QFont("Cascadia Code, Consolas, Courier New")
         mono_font.setPointSize(11)
 
         self._env_table.setRowCount(0)
 
-        def _is_version_component(key: str) -> bool:
+        def _is_version_component(key_: str) -> bool:
             return any(
-                key.endswith(s)
+                key_.endswith(s)
                 for s in ("_MAJOR_VERSION", "_MINOR_VERSION", "_PATCH_VERSION")
             )
 

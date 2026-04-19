@@ -1,3 +1,6 @@
+from typing import Any
+from typing import Callable
+
 from PySide6 import QtCore
 
 
@@ -9,7 +12,7 @@ class WorkerSignals(QtCore.QObject):
 class Worker(QtCore.QRunnable):
     """Generic background task runner."""
 
-    def __init__(self, fn, *args, **kwargs) -> None:
+    def __init__(self, fn: Callable, *args: Any, **kwargs: Any) -> None:
         super().__init__()
         self.fn = fn
         self.args = args

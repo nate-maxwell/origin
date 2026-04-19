@@ -16,105 +16,86 @@ class PublishPanel(QtWidgets.QWidget):
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
         self._thread_pool = QtCore.QThreadPool()
-        self._build_ui()
+        self._create_widgets()
+        self._create_layouts()
+        self._create_connections()
 
-    def _build_ui(self) -> None:
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+    def _create_widgets(self) -> None:
+        self.layout = QtWidgets.QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
 
-        header = QtWidgets.QLabel("Publish Package")
-        header.setObjectName("panel_header")
-        layout.addWidget(header)
+        self.header = QtWidgets.QLabel("Publish Package")
+        self.header.setObjectName("panel_header")
 
-        desc = QtWidgets.QLabel(
-            "Copy a package from source to a repository and tag the git commit."
-        )
-        desc.setObjectName("panel_desc")
-        layout.addWidget(desc)
+        _t = "Copy a package from source to a repository and tag the git commit."
+        self.desc = QtWidgets.QLabel(_t)
+        self.desc.setObjectName("panel_desc")
 
-        layout.addWidget(components.make_divider())
-
-        # Source dir
-        layout.addWidget(components.make_section("Source"))
-        source_row, self._source_field = components.path_row(
+        self.source_row, self._source_field = components.path_row(
             "Package Source Directory",
             "/path/to/my_package",
             self._browse_source,
         )
-        layout.addWidget(source_row)
 
-        # Repository
-        layout.addWidget(components.make_section("Destination"))
-        repo_row, self._repo_field = components.path_row(
+        self.repo_row, self._repo_field = components.path_row(
             "Repository",
             "/path/to/repository",
             self._browse_repo,
         )
-        layout.addWidget(repo_row)
 
-        # Package info preview
-        layout.addWidget(components.make_section("Package Info"))
+        self.info_container = QtWidgets.QWidget()
+        self.info_layout = QtWidgets.QHBoxLayout(self.info_container)
+        self.info_layout.setContentsMargins(28, 0, 28, 0)
+        self.info_layout.setSpacing(24)
 
-        info_container = QtWidgets.QWidget()
-        info_layout = QtWidgets.QHBoxLayout(info_container)
-        info_layout.setContentsMargins(28, 0, 28, 0)
-        info_layout.setSpacing(24)
+        self._pkg_name_label = components.make_info_field("Name", "—")
+        self._pkg_version_label = components.make_info_field("Version", "—")
+        self._pkg_dest_label = components.make_info_field("Destination", "—")
 
-        self._pkg_name_label = self._make_info_field("Name", "—")
-        self._pkg_version_label = self._make_info_field("Version", "—")
-        self._pkg_dest_label = self._make_info_field("Destination", "—")
-        info_layout.addWidget(self._pkg_name_label[0])
-        info_layout.addWidget(self._pkg_version_label[0])
-        info_layout.addWidget(self._pkg_dest_label[0], stretch=1)
-        layout.addWidget(info_container)
-
-        self._source_field.textChanged.connect(self._on_source_changed)
-        self._repo_field.textChanged.connect(self._on_source_changed)
-
-        layout.addWidget(components.make_divider())
-        layout.addSpacing(16)
-
-        # Publish button + status
-        action_container = QtWidgets.QWidget()
-        action_layout = QtWidgets.QHBoxLayout(action_container)
-        action_layout.setContentsMargins(28, 0, 28, 0)
-        action_layout.setSpacing(12)
+        self.action_container = QtWidgets.QWidget()
+        self.action_layout = QtWidgets.QHBoxLayout(self.action_container)
+        self.action_layout.setContentsMargins(28, 0, 28, 0)
+        self.action_layout.setSpacing(12)
 
         self._publish_btn = QtWidgets.QPushButton("Publish Package")
         self._publish_btn.setObjectName("btn_success")
         self._publish_btn.setFixedHeight(38)
         self._publish_btn.setEnabled(False)
         self._publish_btn.clicked.connect(self._publish)
-        action_layout.addWidget(self._publish_btn)
-        action_layout.addStretch()
-        layout.addWidget(action_container)
 
         self._status_label = QtWidgets.QLabel("")
         self._status_label.setContentsMargins(28, 8, 28, 0)
         self._status_label.setWordWrap(True)
-        layout.addWidget(self._status_label)
 
-        layout.addStretch()
+    def _create_layouts(self) -> None:
+        self.layout.addWidget(self.desc)
+        self.layout.addWidget(components.make_divider())
 
-    def _make_info_field(
-        self, label_text: str, value: str
-    ) -> tuple[QtWidgets.QWidget, QtWidgets.QLabel]:
-        container = QtWidgets.QWidget()
-        vl = QtWidgets.QVBoxLayout(container)
-        vl.setContentsMargins(0, 0, 0, 0)
-        vl.setSpacing(4)
-        lbl = components.make_label(label_text)
-        val = QtWidgets.QLabel(value)
-        val.setObjectName("value_label")
-        val.setStyleSheet(
-            f"font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px;"
-            f"color: {style.COLORS['text_primary']}; background: transparent; border: none;"
-            f"text-transform: none; letter-spacing: 0px; font-weight: 400;"
-        )
-        vl.addWidget(lbl)
-        vl.addWidget(val)
-        return container, val
+        self.layout.addWidget(self.source_row)
+        self.layout.addWidget(self.repo_row)
+
+        # Package info preview
+        self.layout.addWidget(components.make_section("Package Info"))
+        self.info_layout.addWidget(self._pkg_name_label[0])
+        self.info_layout.addWidget(self._pkg_version_label[0])
+        self.info_layout.addWidget(self._pkg_dest_label[0], stretch=1)
+        self.layout.addWidget(self.info_container)
+
+        self.layout.addWidget(components.make_divider())
+        self.layout.addSpacing(16)
+
+        self.action_layout.addWidget(self._publish_btn)
+        self.action_layout.addStretch()
+        self.layout.addWidget(self.action_container)
+
+        self.layout.addWidget(self._status_label)
+
+        self.layout.addStretch()
+
+    def _create_connections(self) -> None:
+        self._source_field.textChanged.connect(self._on_source_changed)
+        self._repo_field.textChanged.connect(self._on_source_changed)
 
     def _browse_source(self) -> None:
         path = QtWidgets.QFileDialog.getExistingDirectory(
