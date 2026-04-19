@@ -74,17 +74,3 @@ class OriginWindow(QtWidgets.QMainWindow):
             btn.setProperty("active", i == index)
             btn.style().unpolish(btn)
             btn.style().polish(btn)
-
-
-# -----Entry point-------------------------------------------------------------
-
-
-def main() -> None:
-    app = QtWidgets.QApplication(sys.argv)
-    app.setStyleSheet(style.STYLESHEET_PATH.read_text())
-    window = OriginWindow()
-    window.show()
-    sys.exit(app.exec())
-
-
-main()
