@@ -24,7 +24,8 @@ dependencies = [
     "pytest",
     "distlib",
     "gitpython",
-    "pyyaml"
+    "pyyaml",
+    "PySide6"
 ]
 version = "0.1.0"
 
