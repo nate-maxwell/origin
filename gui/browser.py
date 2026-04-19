@@ -213,18 +213,8 @@ class PackageBrowserPanel(QtWidgets.QWidget):
 
         self._env_table.setRowCount(0)
 
-        def _is_version_component(key_: str) -> bool:
-            return any(
-                key_.endswith(s)
-                for s in ("_MAJOR_VERSION", "_MINOR_VERSION", "_PATCH_VERSION")
-            )
-
-        origin_vars = {
-            k: v
-            for k, v in env.items()
-            if k.startswith("ORIGIN_") and not _is_version_component(k)
-        }
-        other_vars = {k: v for k, v in env.items() if not k.startswith("ORIGIN_")}
+        origin_vars = {k: v for k, v in env.items() if k.startswith("ORIGIN_")}
+        other_vars = {k: v for k, v in env.items() if not k.startswith("ORIGIN_") and k}
 
         rows = list(origin_vars.items()) + list(other_vars.items())
         self._env_table.setRowCount(len(rows))
