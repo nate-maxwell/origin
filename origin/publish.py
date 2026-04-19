@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Optional
 from typing import Union
 
 from distlib.database import DistributionPath
@@ -32,6 +33,43 @@ class PackageVersionNotExistsError(Exception):
     Raised when attempting to publish a package with a package.yaml that cannot
     be found.
     """
+
+
+class PackagePublishVersionError(Exception):
+    """
+    Raised when attempting to publish a package with a version that is lower
+    than or equal to the latest version already published to the repository.
+    """
+
+
+def _latest_published_version(
+    repository: Path, package_name: str
+) -> Optional[tuple[int, ...]]:
+    """
+    Return the highest version tuple already published for a package, or None
+    if no versions exist in the repository.
+
+    Args:
+        repository (Path): Path to the repository root.
+        package_name (str): The package name to search for.
+    Returns:
+        Optional[tuple[int, ...]]: The highest version as a tuple of ints, or
+            None if no published versions exist.
+    """
+    package_dir = repository / package_name
+    if not package_dir.exists():
+        return None
+
+    versions = []
+    for candidate in package_dir.iterdir():
+        if not candidate.is_dir() or candidate.name.startswith("_"):
+            continue
+        try:
+            versions.append(tuple(int(p) for p in candidate.name.split(".")))
+        except ValueError:
+            continue
+
+    return max(versions) if versions else None
 
 
 _ignore_list = [
@@ -106,6 +144,14 @@ def publish_package(
     if Path(package_version_path, "package.yaml").exists():
         err_msg = f"Package {pkg_cfg.name} version {pkg_cfg.version} already exists!"
         raise PackageVersionExistsError(err_msg)
+
+    incoming = tuple(int(p) for p in pkg_cfg.version.split("."))
+    latest = _latest_published_version(repo_path, pkg_cfg.name)
+    if latest is not None and incoming <= latest:
+        latest_str = ".".join(str(p) for p in latest)
+        err_msg = f"Package {pkg_cfg.name} version {pkg_cfg.version} is not newer than "
+        err_msg += f"the latest published version {latest_str}."
+        raise PackagePublishVersionError(err_msg)
 
     # Atomically copy - Copy to a temp directory alongside the destination first
     tmp_path = repo_path / pkg_cfg.name / f"_tmp_{pkg_cfg.version}"
