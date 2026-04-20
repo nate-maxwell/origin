@@ -35,11 +35,35 @@ class PackageVersionNotExistsError(Exception):
     """
 
 
-class PackagePublishVersionError(Exception):
+class PackageVersionOutdatedError(Exception):
     """
     Raised when attempting to publish a package with a version that is lower
     than or equal to the latest version already published to the repository.
     """
+
+
+class BuildCommandError(Exception):
+    """Raised when a package's build_command exits with a non-zero return code."""
+
+
+def _run_build_command(command: Optional[str], source_dir: Path) -> None:
+    """
+    Run a package's build command in the source directory.
+
+    Args:
+        command (str): The shell command to run.
+        source_dir (Path): The working directory to run the command in.
+    Raises:
+        BuildCommandError: If the command exits with a non-zero return code.
+    """
+    if command is None:
+        return
+
+    result = subprocess.run(command, shell=True, cwd=source_dir)
+
+    if result.returncode != 0:
+        err_msg = f"Build command failed with exit code {result.returncode}: {command}"
+        raise BuildCommandError(err_msg)
 
 
 def _latest_published_version(
@@ -106,12 +130,14 @@ def publish_package(
     A publish operation does the following:
     1. Reads the package.yaml in the source directory to determine the
        package name and version.
-    2. Copies the source directory to a temporary location in the repository,
+    2. If a build_command is specified in package.yaml, runs it in the
+       source directory. The publish is aborted if the command fails.
+    3. Copies the source directory to a temporary location in the repository,
        excluding development artifacts such as virtual environments, caches,
        and editor configs.
-    3. Renames the temporary directory into its final location, minimising
+    4. Renames the temporary directory into its final location, minimising
        the window in which a partial publish could be observed.
-    4. Creates and pushes a version tag in the source git repository,
+    5. Creates and pushes a version tag in the source git repository,
        ensuring the deployed artifact is traceable to an exact point in
        source history.
 
@@ -127,6 +153,9 @@ def publish_package(
         PackageVersionNotExistsError: If no package.yaml is found in source_dir.
         PackageVersionExistsError: If the package version has already been
             published to the repository.
+        PackageVersionOutdatedError: If the version is not newer than the latest
+            published version.
+        BuildCommandError: If the build_command exits with a non-zero return code.
         git.GitCommandError: If the version tag push fails.
         ValueError: If the version tag already exists locally.
         UncommittedChangesError: If the source repository has uncommitted changes.
@@ -151,7 +180,10 @@ def publish_package(
         latest_str = ".".join(str(p) for p in latest)
         err_msg = f"Package {pkg_cfg.name} version {pkg_cfg.version} is not newer than "
         err_msg += f"the latest published version {latest_str}."
-        raise PackagePublishVersionError(err_msg)
+        raise PackageVersionOutdatedError(err_msg)
+
+    if pkg_cfg.build_command is not None:
+        _run_build_command(pkg_cfg.build_command, Path(source_dir))
 
     # Atomically copy - Copy to a temp directory alongside the destination first
     tmp_path = repo_path / pkg_cfg.name / f"_tmp_{pkg_cfg.version}"

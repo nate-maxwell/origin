@@ -98,6 +98,7 @@ class PackageConfig(object):
     name: str
     version: str
     env: dict[str, str] = field(default_factory=dict)
+    build_command: Optional[str] = None
 
     @classmethod
     def from_file(cls, path: Union[str, os.PathLike]) -> "PackageConfig":
@@ -135,6 +136,7 @@ class PackageConfig(object):
             name=_name,
             version=_version,
             env=_env,
+            build_command=data.get("build_command"),
         )
 
 

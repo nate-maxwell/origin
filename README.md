@@ -52,24 +52,33 @@ authors:
 description: Python-based hello world example package.
 version: 1.0.0
 env: {}
-
+build_command: "python build.py"  # Optional
 ```
 
-**3. Launch an application.**
+**3. Define an optional build script.**
+
+If your package requires a build step before publishing (compiling extensions,
+generating files, etc.), add a `build_command` to your `package.yaml` and create
+a corresponding build script in your source directory:
 
 ```python
-import origin
+# build.py
+import shutil
+from pathlib import Path
 
-app = origin.launch(
-    executable="C:/Program Files/Nuke15.0/Nuke15.0.exe",
-    environment_config="V:/projects/MY_PROJECT/Environment.json",
-    loadout="nuke",
-)
+source = Path(__file__).parent
 
-app.wait()
-if app.has_crashed:
-    print(f"Nuke exited with code {app.poll()}")
+def build() -> None:
+    dest = source / "python"
+    dest.mkdir(exist_ok=True)
+    shutil.copytree(source / "src", dest, dirs_exist_ok=True)
+
+build()
 ```
+
+The build command runs in the source directory before the copy step. If it exits
+with a non-zero return code the publish is aborted and the repository is left
+untouched.
 
 **4. Publish a package.**
 
@@ -82,19 +91,35 @@ publish_package(
 )
 ```
 
+**5. Launch an application.**
+
+```python
+import origin
+
+app = origin.launch(
+    executable="C:/Program Files/Nuke15.0/Nuke15.0.exe",
+    environment_config="V:/projects/MY_PROJECT/environment.yaml",
+    loadout="nuke",
+)
+
+app.wait()
+if app.has_crashed:
+    print(f"Nuke exited with code {app.poll()}")
+```
+
 ---
 
 ## Documentation
 
 ### [Environment Config](docs/Environment.md)
 
-The `Environment.json` file declares the package versions available to a project,
+The `environment.yaml` file declares the package versions available to a project,
 the repositories to search for packages, and the loadouts used to launch
 applications.
 
 ### [Package](docs/Package.md)
 
-A `Package.json` declares what environment variables a package contributes when
+A `package.yaml` declares what environment variables a package contributes when
 resolved. Also covers the `Package` object produced by the resolver and the
 automatic version variables Origin injects for every package.
 
@@ -107,6 +132,11 @@ builds a `ResolvedEnvironment` ready to pass to a process.
 
 How to launch an application with a resolved environment using `launch()`, and
 how to use the `Application` object to react to the application's exit state.
+
+
+### [Build Scripts](docs/Build.md)
+
+How to make and specify a build script to run before publishing a package.
 
 ### [Publishing](docs/Publishing.md)
 
